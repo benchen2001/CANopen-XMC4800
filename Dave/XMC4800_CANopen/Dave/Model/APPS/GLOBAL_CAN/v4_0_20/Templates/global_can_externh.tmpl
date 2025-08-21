@@ -1,4 +1,8 @@
+package Model.APPS.GLOBAL_CAN.v4_0_20.Templates;
 
+import Model.APPS.GLOBAL_CAN.v4_0_20.GLOBAL_CAN
+
+out.print("""
 /**
  * @cond
  ***********************************************************************************************************************
@@ -33,65 +37,55 @@
  * Change History
  * --------------
  *
- * 2014-06-16:
+ * 2015-05-15:
  *     - Initial version<br>
+ *
  * @endcond
  *
  */
 
-#ifndef _DAVE_H_
-#define _DAVE_H_
-
 /***********************************************************************************************************************
  * HEADER FILES
  **********************************************************************************************************************/
-
-/** #include DAVE APP Header files. */
-#include "xmc_common.h"  
-
-#include "CLOCK_XMC4/clock_xmc4.h"
-  
-
-#include "GLOBAL_CAN/global_can.h"
-  
-
-#include "CAN_NODE/can_node.h"
-  
-
-#include "DIGITAL_IO/digital_io.h"
-  
-
-#include "CPU_CTRL_XMC4/cpu_ctrl_xmc4.h"
-  
-
-#include "UART/uart.h"
-  
-
-#include "SYSTIMER/systimer.h"
-  
-	
+ 
+#ifndef GLOBAL_CAN_EXTERN_H
+#define GLOBAL_CAN_EXTERN_H
 
 /**********************************************************************************************************************
- * ENUMS
+ * MACROS
  **********************************************************************************************************************/
-typedef enum DAVE_STATUS
-{
-  DAVE_STATUS_SUCCESS = 0,
-  DAVE_STATUS_FAILURE
-} DAVE_STATUS_t;
 
 /***********************************************************************************************************************
-* API PROTOTYPES
+ * EXTERN DECLARATIONS
 ***********************************************************************************************************************/
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-DAVE_STATUS_t DAVE_Init(void);
+""");
 
-#ifdef __cplusplus
+
+/**
+*This data type describes the APP handle
+*/
+
+String appInst = null;
+/**
+ * @ingroup GLOBAL_CAN_datastructures
+ * @{
+ */
+for (GLOBAL_CAN Instance : appInstancesList ) {
+
+ appInst = Instance.getInstanceLabel()
+out.print("""
+
+
+extern GLOBAL_CAN_t ${appInst};
+
+"""); 
 }
-#endif
+/**
+ * @}
+ */
+out.print("""
 
-#endif  /** ifndef _DAVE_H_ */
 
+#endif /* End of GLOBAL_CAN_EXTERN_H */
+""");

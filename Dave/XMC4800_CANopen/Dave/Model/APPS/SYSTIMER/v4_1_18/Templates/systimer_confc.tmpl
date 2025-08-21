@@ -1,4 +1,8 @@
+package Model.APPS.SYSTIMER.v4_1_18.Templates;
 
+import Model.APPS.SYSTIMER.v4_1_18.SYSTIMER
+
+out.print("""
 /**
  * @cond
  ***********************************************************************************************************************
@@ -33,65 +37,56 @@
  * Change History
  * --------------
  *
- * 2014-06-16:
- *     - Initial version<br>
+ * 2015-02-16:
+ *     - Initial version.<br>
+ *
+ * 2015-05-19:
+ *     - Structure name changed from SYSTIMER_INIT_t to SYSTIMER_t.<br>
+ *
  * @endcond
  *
  */
-
-#ifndef _DAVE_H_
-#define _DAVE_H_
-
 /***********************************************************************************************************************
  * HEADER FILES
  **********************************************************************************************************************/
 
-/** #include DAVE APP Header files. */
-#include "xmc_common.h"  
-
-#include "CLOCK_XMC4/clock_xmc4.h"
-  
-
-#include "GLOBAL_CAN/global_can.h"
-  
-
-#include "CAN_NODE/can_node.h"
-  
-
-#include "DIGITAL_IO/digital_io.h"
-  
-
-#include "CPU_CTRL_XMC4/cpu_ctrl_xmc4.h"
-  
-
-#include "UART/uart.h"
-  
-
-#include "SYSTIMER/systimer.h"
-  
-	
+#include "systimer.h" """);
+/* To hold App instance number */
+def appInst = null;
+/* To hold Time between two systick interrupt in usec */
+int SYSTIMER_Systick=0;
+/* Flag for XMC1xxx device */
+int Target_1x = 0;
+/* Flag for XMC4xxx device */
+int Target_4x = 1;
+/* To hold clock value */
+double tempclock = 0.0;
+/* for loop  for multiple instance */
+for (SYSTIMER SysTimerInstance : appInstancesList ) {
+ appInst   = SysTimerInstance.getInstanceLabel()
+/* get Flag value for XMC1xxx device from manifest */
+Target_1x= SysTimerInstance.target_1x.value;
+/* get Flag value for XMC4xxx device from manifest */
+Target_4x= SysTimerInstance.target_4x.value;
+out.print("""
 
 /**********************************************************************************************************************
- * ENUMS
- **********************************************************************************************************************/
-typedef enum DAVE_STATUS
-{
-  DAVE_STATUS_SUCCESS = 0,
-  DAVE_STATUS_FAILURE
-} DAVE_STATUS_t;
+* DATA STRUCTURES
+**********************************************************************************************************************/
 
-/***********************************************************************************************************************
-* API PROTOTYPES
-***********************************************************************************************************************/
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+  * @ingroup SYSTIMER_datastructures
+  * @{
+  */
+SYSTIMER_t ${appInst} =
+{""");
+out.print("""
+  .init_status = false /* APP initialization status to ensure whether SYSTIMER_Init called or not */ """);
+out.print("""
+};
 
-DAVE_STATUS_t DAVE_Init(void);
-
-#ifdef __cplusplus
+/**
+ * @}
+ */
+""");
 }
-#endif
-
-#endif  /** ifndef _DAVE_H_ */
-

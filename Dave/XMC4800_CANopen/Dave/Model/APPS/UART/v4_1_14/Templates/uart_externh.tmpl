@@ -1,4 +1,8 @@
+package Model.APPS.UART.v4_1_14.Templates;
 
+import Model.APPS.UART.v4_1_14.UART
+
+out.print("""
 /**
  * @cond
  ***********************************************************************************************************************
@@ -33,65 +37,81 @@
  * Change History
  * --------------
  *
- * 2014-06-16:
- *     - Initial version<br>
+ * 2015-02-16:
+ *     - Initial version for DAVEv4
+ *
  * @endcond
  *
  */
-
-#ifndef _DAVE_H_
-#define _DAVE_H_
-
 /***********************************************************************************************************************
  * HEADER FILES
  **********************************************************************************************************************/
-
-/** #include DAVE APP Header files. */
-#include "xmc_common.h"  
-
-#include "CLOCK_XMC4/clock_xmc4.h"
-  
-
-#include "GLOBAL_CAN/global_can.h"
-  
-
-#include "CAN_NODE/can_node.h"
-  
-
-#include "DIGITAL_IO/digital_io.h"
-  
-
-#include "CPU_CTRL_XMC4/cpu_ctrl_xmc4.h"
-  
-
-#include "UART/uart.h"
-  
-
-#include "SYSTIMER/systimer.h"
-  
-	
-
+ 
 /**********************************************************************************************************************
- * ENUMS
+ * MACROS
  **********************************************************************************************************************/
-typedef enum DAVE_STATUS
-{
-  DAVE_STATUS_SUCCESS = 0,
-  DAVE_STATUS_FAILURE
-} DAVE_STATUS_t;
 
 /***********************************************************************************************************************
-* API PROTOTYPES
+ * EXTERN DECLARATIONS
 ***********************************************************************************************************************/
+#ifndef UART_EXTERN_H
+#define UART_EXTERN_H
+
+""")
+/*******************************************************************************
+** @Defines
+*******************************************************************************/
+out.print("""
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-DAVE_STATUS_t DAVE_Init(void);
-
+  
+/*Extern declaration for callback functions and UART APP instance handles*/
+""");
+for (UART uart_inst : appInstancesList ) {
+  /*Write extern declaration for callback functions*/
+  List handler_defs =
+  [
+    uart_inst.gstring_tx_callback.value,
+    uart_inst.gstring_rx_callback.value,
+    uart_inst.gstring_sync_brk.value,
+    uart_inst.gstring_receiver_noise.value,
+    uart_inst.gstring_format_errorbit0.value,
+    uart_inst.gstring_format_errorbit1.value,
+    uart_inst.gstring_collision.value
+  ]
+  /*List for callback function checkboxes*/
+  List handler_checks =
+  [
+    uart_inst.gcheck_tx_callback.value,
+    uart_inst.gcheck_rx_callback.value,
+    uart_inst.gcheck_sync_brk.value,
+    uart_inst.gcheck_receiver_noise.value,
+    uart_inst.gcheck_format_errorbit0.value,
+    uart_inst.gcheck_format_errorbit1.value,
+    uart_inst.gcheck_collision.value
+  ]
+  
+  /*Generate function extern declaration if the callback is enabled
+   * and the function name is not empty.*/
+  for(Integer indexer = 0; indexer < 7; indexer++)
+  {
+    if((handler_checks[indexer]) && (handler_defs[indexer] != null) && (handler_defs[indexer] != ""))
+    {
+      out.print("  extern void "+handler_defs[indexer]+"(void);")
+      out.print("\n")
+    }
+  }
+out.print("""
+  extern UART_t ${uart_inst.getInstanceLabel()}; 
+""")
+}
+out.print("""                    
 #ifdef __cplusplus
 }
 #endif
 
-#endif  /** ifndef _DAVE_H_ */
+#endif  /* ifndef UART_EXTERN_H */
 
+/*CODE_BLOCK_END*/
+""")
