@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug XMC4800 (J-Link)",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/Dave/XMC4800_CANopen/Debug/XMC4800_CANopen.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "main",
+            "servertype": "jlink",
+            "device": "XMC4800-2048",
+            "interface": "swd",
+            "serverArgs": [
+                "-singlerun",
+                "-strict",
+                "-timeout",
+                "0",
+                "-nogui"
+            ],
+            "svdFile": "${workspaceFolder}/scripts/XMC4800.svd",
+            "preLaunchTask": "Build with DAVE",
+            "armToolchainPath": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC/bin"
+        },
+        {
+            "name": "Attach to Target",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/Dave/XMC4800_CANopen/Debug/XMC4800_CANopen.elf",
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "jlink",
+            "device": "XMC4800-2048",
+            "interface": "swd"
+        }
+    ]
+}

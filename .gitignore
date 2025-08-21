@@ -1,0 +1,64 @@
+# XMC4800 CANopen Project .gitignore
+
+# DAVE IDE Generated Files
+Dave/Generated/
+Dave/.metadata/
+Dave/**/Debug/
+Dave/**/Release/
+Dave/**/*.launch
+Dave/**/settings/
+Dave/**/RemoteSystemsTempFiles/
+
+# Build outputs
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.dep
+*.d
+
+# VS Code specific
+.vscode/ipch/
+.vscode/.browse.VC.db*
+.vscode/c_cpp_properties.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Log files
+*.log
+
+# Archive files
+*.zip
+*.tar.gz
+*.7z
+
+# IDE specific
+*.swp
+*.swo
+.idea/
+
+# CANopenNode submodule (will be tracked separately)
+# CANopenNode/
+
+# Documentation builds
+docs/_build/
+docs/html/
+docs/latex/
+
+# Test outputs
+test_results/
+coverage/
+
+# Tools and utilities temp files
+tools/temp/

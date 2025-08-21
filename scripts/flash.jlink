@@ -1,0 +1,7 @@
+// J-Link Script for flashing XMC4800
+connect
+halt
+loadfile Dave/XMC4800_CANopen/Debug/XMC4800_CANopen.hex
+r
+g
+exit

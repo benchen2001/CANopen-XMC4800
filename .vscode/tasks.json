@@ -1,0 +1,91 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build with DAVE",
+            "type": "shell",
+            "command": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/eclipse.exe",
+            "args": [
+                "-nosplash",
+                "-application",
+                "org.eclipse.cdt.managedbuilder.core.headlessbuild",
+                "-data",
+                "${workspaceFolder}/Dave",
+                "-build",
+                "XMC4800_CANopen/Debug"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean with DAVE",
+            "type": "shell",
+            "command": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/eclipse.exe",
+            "args": [
+                "-nosplash",
+                "-application",
+                "org.eclipse.cdt.managedbuilder.core.headlessbuild",
+                "-data",
+                "${workspaceFolder}/Dave",
+                "-cleanBuild",
+                "XMC4800_CANopen/Debug"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Flash with J-Link",
+            "type": "shell",
+            "command": "C:/Program Files (x86)/SEGGER/JLink/JLink.exe",
+            "args": [
+                "-device",
+                "XMC4800-2048",
+                "-if",
+                "SWD",
+                "-speed",
+                "4000",
+                "-CommanderScript",
+                "${workspaceFolder}/scripts/flash.jlink"
+            ],
+            "group": "test",
+            "dependsOn": "Build with DAVE"
+        },
+        {
+            "label": "Generate DAVE Code",
+            "type": "shell",
+            "command": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/eclipse.exe",
+            "args": [
+                "-nosplash",
+                "-application",
+                "com.ifx.davex.project.generator.application",
+                "-data",
+                "${workspaceFolder}/Dave",
+                "-project",
+                "XMC4800_CANopen"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            }
+        }
+    ]
+}
