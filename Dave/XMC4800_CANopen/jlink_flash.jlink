@@ -1,0 +1,7 @@
+si 1
+speed 4000
+device XMC4800-2048
+loadfile Debug/XMC4800_CANopen.hex
+r
+g
+qc

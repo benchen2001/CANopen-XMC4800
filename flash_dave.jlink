@@ -1,0 +1,9 @@
+si 1
+speed 12000
+device XMC4800-2048
+connect
+erase
+loadbin "Dave\XMC4800_CANopen\Debug\XMC4800_CANopen.bin", 0x08000000
+r
+g
+qc

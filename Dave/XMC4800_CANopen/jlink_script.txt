@@ -1,0 +1,6 @@
+r
+h
+loadbin Debug\XMC4800_CANopen.bin, 0x0C000000
+r
+g
+qc

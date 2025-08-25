@@ -1,0 +1,9 @@
+device XMC4800-2048
+si SWD
+speed 12000
+r
+h
+loadfile C:\prj\AI\CANOpen\Dave\XMC4800_CANopen\Debug\XMC4800_CANopen.hex
+r
+g
+qc

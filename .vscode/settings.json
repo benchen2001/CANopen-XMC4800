@@ -1,5 +1,5 @@
 {
-    "C_Cpp.default.compilerPath": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC/bin/arm-none-eabi-gcc.exe",
+    "C_Cpp.default.compilerPath": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC-49/bin/arm-none-eabi-gcc.exe",
     "C_Cpp.default.cStandard": "c11",
     "C_Cpp.default.cppStandard": "c++14",
     "C_Cpp.default.intelliSenseMode": "gcc-arm",
@@ -7,7 +7,10 @@
         "${workspaceFolder}/**",
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/CANopenNode/**",
-        "${workspaceFolder}/Dave/Generated/**",
+        "${workspaceFolder}/Dave/XMC4800_CANopen/Dave/Generated/**",
+        "${workspaceFolder}/Dave/XMC4800_CANopen/Libraries/**",
+        "${workspaceFolder}/Dave/XMC4800_CANopen/Libraries/XMCLib/inc/**",
+        "${workspaceFolder}/Dave/XMC4800_CANopen/Libraries/CMSIS/**",
         "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC/arm-none-eabi/include/**"
     ],
     "C_Cpp.default.defines": [
@@ -28,7 +31,7 @@
     "files.encoding": "utf8",
     "files.eol": "\n",
     "git.ignoreLimitWarning": true,
-    "cortex-debug.armToolchainPath": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC/bin",
+    "cortex-debug.armToolchainPath": "C:/Infineon/Tools/DAVE IDE/4.5.0.202105191637/eclipse/ARM-GCC-49/bin",
     "cortex-debug.JLinkGDBServerPath": "C:/Program Files (x86)/SEGGER/JLink/JLinkGDBServerCL.exe",
     "C_Cpp.errorSquiggles": "enabled",
     "C_Cpp.intelliSenseEngine": "default",

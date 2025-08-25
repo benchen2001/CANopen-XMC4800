@@ -124,11 +124,11 @@ static XMC_CAN_MO_t  CAN_NODE_0_LMO_01 = {
   .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
   .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
       ,
-  .can_identifier   = 0x7ffU, 
+  .can_identifier   = 0x8aU, 
       
   .can_id_mask      = 0x7ffU,
   .can_ide_mask     = 1U,
-  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO35,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO32,
   .can_data_length  = 8U,
       
   .can_data[1]      = 0x0U,
@@ -140,12 +140,342 @@ const CAN_NODE_LMO_t CAN_NODE_0_LMO_01_Config = {
         
   .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_01,    
          
+  .number  = 32U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_02 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x18aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO31,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_02_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_02,    
+         
+  .number  = 31U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_03 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x28aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO30,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_03_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_03,    
+         
+  .number  = 30U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_04 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x38aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO39,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_04_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_04,    
+         
+  .number  = 39U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_05 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x48aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO38,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_05_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_05,    
+         
+  .number  = 38U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_06 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x58aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO37,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_06_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_06,    
+         
+  .number  = 37U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_07 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_TRANSMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x70aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO36,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_07_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_07,    
+         
+  .number  = 36U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = true,
+  .rx_event_enable = false
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_08 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_RECMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x60aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO9,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_08_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_08,    
+         
+  .number  = 9U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = false,
+  .rx_event_enable = true
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_09 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_RECMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x20aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO60,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_09_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_09,    
+         
+  .number  = 60U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = false,
+  .rx_event_enable = true
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_10 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_RECMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x30aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO33,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_10_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_10,    
+         
+  .number  = 33U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = false,
+  .rx_event_enable = true
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_11 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_RECMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x40aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO34,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_11_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_11,    
+         
+  .number  = 34U,
+       
+  .tx_sr   = 0U,
+  .rx_sr   = 0U,
+  .tx_event_enable = false,
+  .rx_event_enable = true
+};
+      
+static XMC_CAN_MO_t  CAN_NODE_0_LMO_12 = {
+          
+  .can_mo_type      = XMC_CAN_MO_TYPE_RECMSGOBJ,
+  .can_id_mode      = XMC_CAN_FRAME_TYPE_STANDARD_11BITS,
+  .can_priority     = XMC_CAN_ARBITRATION_MODE_IDE_DIR_BASED_PRIO_2
+      ,
+  .can_identifier   = 0x50aU, 
+      
+  .can_id_mask      = 0x7ffU,
+  .can_ide_mask     = 1U,
+  .can_mo_ptr       = (CAN_MO_TypeDef*)CAN_MO35,
+  .can_data_length  = 8U,
+      
+  .can_data[1]      = 0x0U,
+      
+  .can_data[0]      = 0x0U 
+};
+      
+const CAN_NODE_LMO_t CAN_NODE_0_LMO_12_Config = {
+        
+  .mo_ptr     = (XMC_CAN_MO_t*)&CAN_NODE_0_LMO_12,    
+         
   .number  = 35U,
        
   .tx_sr   = 0U,
   .rx_sr   = 0U,
   .tx_event_enable = false,
-  .rx_event_enable = false
+  .rx_event_enable = true
 };
       
 /* CAN_NODE init Structure configuration */
@@ -166,29 +496,29 @@ const CAN_NODE_t  CAN_NODE_0 =
   .lmobj_ptr         = { 
   
     (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_01_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_02_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_03_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_04_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_05_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_06_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_07_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_08_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_09_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_10_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_11_Config
+        , 
+    (CAN_NODE_LMO_t*)&CAN_NODE_0_LMO_12_Config
         ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
-      NULL
-      ,  
       NULL
       ,  
       NULL
@@ -230,7 +560,7 @@ const CAN_NODE_t  CAN_NODE_0 =
       NULL
        },
   .node_num          = 1U,
-  .mo_count          = 1U,
+  .mo_count          = 12U,
   .loopback_enable         = false, 
   .alert_event_enable      = false,
   .lec_event_enable        = false, 

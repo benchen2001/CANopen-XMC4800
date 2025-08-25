@@ -49,16 +49,10 @@
 /** #include DAVE APP Header files. */
 #include "xmc_common.h"  
 
-#include "CLOCK_XMC4/clock_xmc4.h"
-  
-
-#include "GLOBAL_CAN/global_can.h"
-  
-
-#include "CAN_NODE/can_node.h"
-  
-
 #include "DIGITAL_IO/digital_io.h"
+  
+
+#include "CLOCK_XMC4/clock_xmc4.h"
   
 
 #include "CPU_CTRL_XMC4/cpu_ctrl_xmc4.h"
@@ -68,6 +62,15 @@
   
 
 #include "SYSTIMER/systimer.h"
+  
+
+#include "USBD/usbd.h"
+  
+
+#include "GLOBAL_CAN/global_can.h"
+  
+
+#include "CAN_NODE/can_node.h"
   
 	
 

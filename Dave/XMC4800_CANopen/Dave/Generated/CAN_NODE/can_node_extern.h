@@ -67,5 +67,27 @@ extern const CAN_NODE_t CAN_NODE_0;
 
 extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_01_Config;
      
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_02_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_03_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_04_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_05_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_06_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_07_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_08_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_09_Config;
+     
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_10_Config;
+
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_11_Config;
+
+extern const CAN_NODE_LMO_t CAN_NODE_0_LMO_12_Config;
+
 #endif /* End of CAN_NODE_EXTERN_H */
 

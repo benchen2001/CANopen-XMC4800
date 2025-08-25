@@ -9,9 +9,6 @@
   <nodes xsi:type="ApplicationModel:AppNode">
     <resource xsi:type="ResourceModel:App" href="APPS/GLOBAL_CAN/v4_0_20/GLOBAL_CAN_0.app#/"/>
   </nodes>
-  <nodes xsi:type="ApplicationModel:AppNode">
-    <resource xsi:type="ResourceModel:App" href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#/"/>
-  </nodes>
   <nodes xsi:type="ApplicationModel:PeripheralNode">
     <resource xsi:type="ResourceModel:Peripheral" href="HW_RESOURCES/port1/port1_1.dd#/"/>
   </nodes>
@@ -57,21 +54,26 @@
   <nodes xsi:type="ApplicationModel:AppNode">
     <resource xsi:type="ResourceModel:App" href="APPS/DIGITAL_IO/v4_0_18/DIGITAL_IO_1.app#/"/>
   </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/USBD/v4_0_16/USBD_0.app#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:PeripheralNode">
+    <resource xsi:type="ResourceModel:Peripheral" href="HW_RESOURCES/usb0/usb0_0.dd#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#/"/>
+  </nodes>
   <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.2" target="//@nodes.0"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.3" target="//@nodes.2"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.10" target="//@nodes.0"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.10" target="//@nodes.9"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.14" target="//@nodes.0"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.14" target="//@nodes.9"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.9" target="//@nodes.0"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.9" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.13" target="//@nodes.0"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.13" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.18" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.18" target="//@nodes.0"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.20" target="//@nodes.2"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.0"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.5"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.6"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.0"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.1"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.2"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.3"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.4"/>
-  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.5"/>
   <hwConnections href="APPS/DIGITAL_IO/v4_0_18/DIGITAL_IO_0.app#//@connections.0"/>
   <hwConnections href="APPS/DIGITAL_IO/v4_0_18/DIGITAL_IO_0.app#//@connections.1"/>
   <hwConnections href="APPS/CPU_CTRL_XMC4/v4_0_18/CPU_CTRL_XMC4_0.app#//@connections.7"/>
@@ -99,4 +101,10 @@
   <hwConnections href="APPS/UART/v4_1_14/UART_0.app#//@connections.21"/>
   <hwConnections href="APPS/DIGITAL_IO/v4_0_18/DIGITAL_IO_1.app#//@connections.0"/>
   <hwConnections href="APPS/DIGITAL_IO/v4_0_18/DIGITAL_IO_1.app#//@connections.1"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.0"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.1"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.2"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.3"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.4"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.5"/>
 </ApplicationModel:ApplicationData>
