@@ -21,6 +21,34 @@ extern "C" {
 /* XMC4800 DAVE includes */
 #include "DAVE.h"
 
+/* **🎯PortNote: XMC4800 特定的類型定義 - 必須在 CANopen 標頭檔之前定義** */
+
+/* **🎯PortNote: 資料儲存物件結構 - 與 CANopenNode 標準一致** */
+/**
+ * Data storage object for one entry.
+ * Must be defined in the CO_driver_target.h file.
+ */
+typedef struct {
+    void* addr;                 /**< Address of data to store, always required. */
+    size_t len;                 /**< Length of data to store, always required. */
+    uint8_t subIndexOD;         /**< Sub index in OD objects 1010 and 1011, from 2 to 127. */
+    uint8_t attr;               /**< Attribute from CO_storage_attributes_t, always required. */
+    void* storageModule;        /**< Pointer to storage module, target system specific usage. */
+    uint16_t crc;               /**< CRC checksum of the data stored in eeprom, set on store. */
+    size_t eepromAddrSignature; /**< Address of entry signature inside eeprom, set by init. */
+    size_t eepromAddr;          /**< Address of data inside eeprom, set by init. */
+    size_t offset;              /**< Offset of next byte being updated by automatic storage. */
+    void* additionalParameters; /**< Additional target specific parameters, optional. */
+    /* Additional variables (target specific) */
+    void* addrNV;               /**< XMC4800 特定：非揮發性記憶體位址 */
+} CO_storage_entry_t;
+/* 這些配置必須在包含 CANopen 標頭檔之前定義 */
+#ifndef CO_CONFIG_LSS_SLAVE
+#define CO_CONFIG_LSS_SLAVE                         0x01
+#endif
+#define CO_CONFIG_LSS       (CO_CONFIG_LSS_SLAVE)    /* 啟用 LSS Slave 功能 */
+#define CO_CONFIG_LEDS      0                        /* 禁用 LED 功能 (XMC4800 自訂實現) */
+
 /* Critical sections - 支援兩種調用方式 */
 #define CO_LOCK_CAN_SEND(...)               do { __disable_irq(); } while (0)
 #define CO_UNLOCK_CAN_SEND(...)             do { __enable_irq(); } while (0)
@@ -100,9 +128,6 @@ typedef struct {
 #define CO_CANrxMsg_readIdent(msg)      ((uint16_t)(((CO_CANrxMsg_t *)(msg))->ident))
 #define CO_CANrxMsg_readDLC(msg)        ((uint8_t)(((CO_CANrxMsg_t *)(msg))->DLC))
 #define CO_CANrxMsg_readData(msg)       ((uint8_t *)(((CO_CANrxMsg_t *)(msg))->data))
-
-/* Received message object */
-typedef CO_CANrxMsg_t CO_CANrxMsg_t;
 
 /* Timer definitions - 移除衝突的外部聲明 */
 #define CO_timer1ms                     CO_timer1ms

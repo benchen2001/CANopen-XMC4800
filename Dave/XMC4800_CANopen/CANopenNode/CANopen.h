@@ -33,14 +33,13 @@
 #include "301/CO_SYNC.h"
 #include "301/CO_PDO.h"
 #include "301/CO_TIME.h"
-/* Temporarily disabled - missing modules */
-/* #include "303/CO_LEDs.h" */
-/* #include "304/CO_GFC.h" */
-/* #include "304/CO_SRDO.h" */
-/* #include "305/CO_LSSslave.h" */
-/* #include "305/CO_LSSmaster.h" */
-/* #include "309/CO_gateway_ascii.h" */
-/* #include "extra/CO_trace.h" */
+#include "303/CO_LEDs.h"
+#include "304/CO_GFC.h"
+#include "304/CO_SRDO.h"
+#include "305/CO_LSSslave.h"
+#include "305/CO_LSSmaster.h"
+#include "309/CO_gateway_ascii.h"
+#include "extra/CO_trace.h"
 
 #ifdef __cplusplus
 extern "C" {

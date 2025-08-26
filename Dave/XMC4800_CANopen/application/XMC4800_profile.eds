@@ -1,23 +1,23 @@
 [FileInfo]
-FileName=DS301_profile.eds
+FileName=XMC4800_profile.eds
 FileVersion=1
 FileRevision=1
 LastEDS=
 EDSVersion=4.0
-Description=
+Description=TC1 EDS
 CreationTime=1:00PM
 CreationDate=11-23-2020
-CreatedBy=
+CreatedBy=Chieftek Precision Co.
 ModificationTime=6:39PM
 ModificationDate=08-09-2021
 ModifiedBy=
 
 [DeviceInfo]
 VendorName=
-VendorNumber=
-ProductName=New Product
-ProductNumber=
-RevisionNumber=0
+VendorNumber=0x000003F5
+ProductName=CANopen-IO
+ProductNumber=0x01
+RevisionNumber=0x01
 BaudRate_10=1
 BaudRate_20=1
 BaudRate_50=1
@@ -27,7 +27,7 @@ BaudRate_500=1
 BaudRate_800=1
 BaudRate_1000=1
 SimpleBootUpMaster=0
-SimpleBootUpSlave=0
+SimpleBootUpSlave=1
 Granularity=8
 DynamicChannelsSupported=0
 CompactPDO=0
@@ -49,10 +49,13 @@ Dummy0007=1
 Lines=0
 
 [MandatoryObjects]
-SupportedObjects=3
+SupportedObjects=6
 1=0x1000
 2=0x1001
-3=0x1018
+3=0x1003
+4=0x1017
+5=0x1018
+6=0x1200
 
 [1000]
 ParameterName=Device type
@@ -168,7 +171,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0005
 AccessType=rw
-DefaultValue=
+DefaultValue=0
 PDOMapping=0
 
 [1003sub1]
@@ -177,7 +180,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0
 PDOMapping=0
 
 [1003sub2]
@@ -186,7 +189,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub3]
@@ -195,7 +198,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub4]
@@ -204,7 +207,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub5]
@@ -213,7 +216,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub6]
@@ -222,7 +225,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub7]
@@ -231,7 +234,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub8]
@@ -240,7 +243,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub9]
@@ -249,7 +252,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subA]
@@ -258,7 +261,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subB]
@@ -267,7 +270,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subC]
@@ -276,7 +279,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subD]
@@ -285,7 +288,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subE]
@@ -294,7 +297,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003subF]
@@ -303,7 +306,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1003sub10]
@@ -312,7 +315,7 @@ ObjectType=0x7
 ;StorageLocation=RAM
 DataType=0x0007
 AccessType=ro
-DefaultValue=
+DefaultValue=0x00000000
 PDOMapping=0
 
 [1005]

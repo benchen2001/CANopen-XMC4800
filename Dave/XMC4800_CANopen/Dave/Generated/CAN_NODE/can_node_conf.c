@@ -101,8 +101,8 @@ static const XMC_GPIO_CONFIG_t  CAN_NODE_0_gpio_in_config =
 static const XMC_CAN_NODE_NOMINAL_BIT_TIME_CONFIG_t  CAN_NODE_0_BitTimeConfig = {
   .can_frequency = (uint32_t)1.44E8, 
   .baudrate      = (uint32_t)(500 * 1000),   
-  .sample_point  = (uint16_t)(80 * 100),
-  .sjw           = (uint16_t)1
+  .sample_point  = (uint16_t)(75 * 100),
+  .sjw           = (uint16_t)2
 };
 
   
