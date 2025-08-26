@@ -19,6 +19,19 @@ Dave/**/RemoteSystemsTempFiles/
 *.dep
 *.d
 
+# Large compiled objects
+can_xmc4800.o
+test_compile.o
+test_dave_integration.o
+test_integration.o
+xmc4800_can_basic_test.o
+
+# Preprocessed outputs
+preprocessed_output.txt
+
+# CanOpenSTM32 directory (separate repository)
+CanOpenSTM32/
+
 # VS Code specific
 .vscode/ipch/
 .vscode/.browse.VC.db*
