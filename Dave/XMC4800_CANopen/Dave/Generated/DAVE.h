@@ -61,9 +61,6 @@
 #include "UART/uart.h"
   
 
-#include "SYSTIMER/systimer.h"
-  
-
 #include "USBD/usbd.h"
   
 
@@ -71,6 +68,15 @@
   
 
 #include "CAN_NODE/can_node.h"
+  
+
+#include "INTERRUPT/interrupt.h"
+  
+
+#include "GLOBAL_CCU4/global_ccu4.h"
+  
+
+#include "TIMER/timer.h"
   
 	
 

@@ -39,9 +39,6 @@
   <nodes xsi:type="ApplicationModel:PeripheralNode">
     <resource xsi:type="ResourceModel:Peripheral" href="HW_RESOURCES/usic1/usic1_1.dd#/"/>
   </nodes>
-  <nodes xsi:type="ApplicationModel:AppNode">
-    <resource xsi:type="ResourceModel:App" href="APPS/SYSTIMER/v4_1_18/SYSTIMER_0.app#/"/>
-  </nodes>
   <nodes xsi:type="ApplicationModel:PeripheralNode">
     <resource xsi:type="ResourceModel:Peripheral" href="HW_RESOURCES/usic0/usic0_0.dd#/"/>
   </nodes>
@@ -63,14 +60,31 @@
   <nodes xsi:type="ApplicationModel:AppNode">
     <resource xsi:type="ResourceModel:App" href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#/"/>
   </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/INTERRUPT/v4_0_10/INTERRUPT_0.app#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/INTERRUPT/v4_0_10/INTERRUPT_1.app#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/GLOBAL_CCU4/v4_1_14/GLOBAL_CCU4_0.app#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:AppNode">
+    <resource xsi:type="ResourceModel:App" href="APPS/TIMER/v4_1_12/TIMER_0.app#/"/>
+  </nodes>
+  <nodes xsi:type="ApplicationModel:PeripheralNode">
+    <resource xsi:type="ResourceModel:Peripheral" href="HW_RESOURCES/ccu43/ccu43_3.dd#/"/>
+  </nodes>
   <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.2" target="//@nodes.0"/>
   <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.9" target="//@nodes.0"/>
   <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.9" target="//@nodes.8"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.13" target="//@nodes.0"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.13" target="//@nodes.8"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.18" target="//@nodes.8"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.18" target="//@nodes.0"/>
-  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.20" target="//@nodes.2"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.17" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.17" target="//@nodes.0"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.19" target="//@nodes.2"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.20" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.21" target="//@nodes.8"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.22" target="//@nodes.0"/>
+  <connections xsi:type="ApplicationModel:NodeConnection" source="//@nodes.23" target="//@nodes.22"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.0"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.5"/>
   <hwConnections href="APPS/CLOCK_XMC4/v4_0_24/CLOCK_XMC4_0.app#//@connections.6"/>
@@ -107,4 +121,18 @@
   <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.3"/>
   <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.4"/>
   <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.5"/>
+  <hwConnections href="APPS/GLOBAL_CCU4/v4_1_14/GLOBAL_CCU4_0.app#//@connections.0"/>
+  <hwConnections href="APPS/TIMER/v4_1_12/TIMER_0.app#//@connections.0"/>
+  <hwConnections href="APPS/TIMER/v4_1_12/TIMER_0.app#//@connections.2"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.6"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.7"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.8"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.9"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.10"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.11"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.12"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.13"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.14"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.15"/>
+  <hwConnections href="APPS/CAN_NODE/v4_1_24/CAN_NODE_0.app#//@connections.16"/>
 </ApplicationModel:ApplicationData>

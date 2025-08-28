@@ -5,7 +5,7 @@
  *  Author: benchen
  */
 
-#include "DAVE.h"                   // DAVE 所有硬體抽象層 (CAN_NODE, DIGITAL_IO, UART, SYSTIMER)
+#include "DAVE.h"                   // DAVE 所有硬體抽象層 (CAN_NODE, DIGITAL_IO, UART, TIMER)
 #include "CANopenNode/CANopen.h"     // CANopenNode 主頭檔 (正確路徑)
 #include "application/OD.h"          // 物件字典定義
 #include <stdio.h>
@@ -29,8 +29,9 @@ static CO_t                 *CO = NULL;
 extern volatile uint32_t    CO_timer1ms;      /* 1ms 計時器變數 (定義在 CO_driver_XMC4800.c) */
 extern void Debug_Printf_Raw(const char* format, ...);
 
-/* SYSTIMER 回調函數前向宣告 */
-void SYSTIMER_Callback(void *args);
+/* DAVE UI 專業中斷處理函數前向宣告 */
+void TimerHandler(void);
+void CAN_Handler(void);
 
 /* 🎯 XMC4800 CANopenNode 架構 - 完全使用 DAVE CAN_NODE APP 配置 */
 typedef struct {
@@ -39,7 +40,6 @@ typedef struct {
     uint16_t    baudrate;           /* CAN 波特率 (kbps) - DAVE APP UI 已設定 */
     
     /* **🔧 XMC4800 DAVE APP 硬體抽象** */
-    uint32_t    systimerID;         /* DAVE SYSTIMER ID */
     void        (*HWInitFunction)(); /* 硬體初始化函數 (DAVE_Init 已完成) */
     
     /* **🔧 DAVE CAN_NODE APP 抽象 - 完全依賴 DAVE UI 設定** */ 
@@ -57,8 +57,7 @@ typedef struct {
 static CANopenNodeXMC4800 canopenNodeXMC4800 = {
     .desiredNodeID = 10,
     .activeNodeID = 10,
-    .baudrate = 500,            /* 注意：實際波特率由 DAVE CAN_NODE APP UI 設定 */
-    .systimerID = 0,            /* SYSTIMER ID (將在 init 中設定) */
+    .baudrate = 500,            /* 注意：實際波特率由 DAVE CAN_NODE APP UI 設定，此值僅供CANopenNode參考 */
     .HWInitFunction = NULL,     /* XMC4800 使用 DAVE_Init() 完成所有硬體設定 */
     .CANHandle = NULL,          /* 將設為 &CAN_NODE_0 (DAVE APP 物件) */
     .outStatusLEDGreen = 0,
@@ -70,7 +69,7 @@ static CANopenNodeXMC4800 canopenNodeXMC4800 = {
 /* Application variables */
 static CO_NMT_reset_cmd_t   reset = CO_RESET_NOT;
 static uint8_t              pendingNodeId = 10;
-static uint16_t             pendingBitRate = 500;  /* 修正：與 canopenNodeXMC4800.baudrate 保持一致 */
+static uint16_t             pendingBitRate = 500;  /* 與 DAVE UI CAN_NODE APP 設定保持一致 */
 
 /* Test CAN message variables */
 static uint32_t             test_msg_counter = 0;
@@ -87,12 +86,7 @@ static uint32_t             emergency_count = 0;
 static uint32_t             heartbeat_count = 0;
 static bool                 canopen_ready = false;
 
-/* Function prototypes - 參考 CanOpenSTM32 架構 */
-static void app_programStart(void);
-/* Forward declarations */
-static CO_NMT_reset_cmd_t app_programReset(void);
-static void app_programEnd(void);
-static void mainTask_1ms(void);
+
 static void CO_errExit(char* msg);
 static void app_updateLEDs(void);
 static void send_test_can_message(void);
@@ -108,7 +102,6 @@ extern void Debug_ProcessISRBuffer(void);                  /* ISR 緩衝區處�
 /* **🎯 簡單的宏定義，將 Debug_Printf 重定向到外部實現** */
 #define Debug_Printf Debug_Printf_Raw
 static void canopen_app_process(void);
-static void canopen_app_interrupt(void);
 
 /* ISR 除錯緩衝區處理函數 (在 CO_driver_XMC4800.c 中實現) */
 extern void Debug_ProcessISRBuffer(void);
@@ -184,221 +177,24 @@ int main(void)
     }
 
     Debug_Printf("CANopen init SUCCESS!\r\n");
+    
+    /* **🎯 CANopen 主循環 - 標準 CanOpenSTM32 架構** */
 
-    /* Main infinite loop - 完全參考 CanOpenSTM32 標準 */
+    /* Main infinite loop */
     while(1U)
     {
-        /* **🎯 標準 CanOpenSTM32 主循環架構** */
-        
-        /* 1. 專業 CANopen 處理 (對應 CanOpenSTM32 的 canopen_app_process) */
+        /* 1. CANopen 核心處理 (定時器處理由 TimerHandler() 中斷管理) */
         canopen_app_process();
         
-        /* 2. LED 狀態反映 (對應 CanOpenSTM32 的 GPIO 寫入) */
-        /* 在主循環中更新實際 LED 狀態 - 參考 CanOpenSTM32 */
+        /* 2. LED 狀態更新 (反映 CANopen NMT 狀態) */
         if (canopenNodeXMC4800.outStatusLEDGreen) {
             DIGITAL_IO_SetOutputHigh(&LED1);
         } else {
             DIGITAL_IO_SetOutputLow(&LED1);
         }
         
-        /* 3. 維持原有的 1ms 任務處理以確保相容性 */
-        mainTask_1ms();
-        
-        /* 4. 處理 ISR 除錯緩衝區 */
+        /* 3. 處理除錯緩衝區 */
         Debug_ProcessISRBuffer();
-        
-        /* **🎯 可選：短暫延遲避免過度佔用 CPU (CanOpenSTM32 中有些版本有此設計)** */
-        /* 注意：XMC4800 通常不需要此延遲，因為有 1ms 中斷控制節拍 */
-    }
-}
-
-/**
- * 程式啟動初始化 - 學習 STM32 模式
- */
-static void app_programStart(void)
-{
-    uint32_t heapMemoryUsed;
-
-    /* DAVE_Init() 已在 main() 中執行，這裡只做 CANopen 特定的初始化 */
-    
-    /* 確認 UART_0 初始化狀態 */
-    if (UART_0.runtime == NULL) {
-        CO_errExit("ERROR: UART_0 not initialized");
-    }
-
-    /* 測試 UART 輸出 */
-    Debug_Printf("UART_0 initialized successfully\r\n");
-
-    Debug_Printf("\r\n=== XMC4800 CANopen Device ===\r\n");
-    Debug_Printf("Based on CanOpenSTM32 best practices\r\n");
-
-    /* CANopen 堆疊初始化 - 只在啟動時分配一次記憶體 */
-    CO = CO_new(NULL, &heapMemoryUsed);
-    if (CO == NULL) {
-        CO_errExit("ERROR: Cannot allocate CANopen memory");
-    } else {
-        Debug_Printf("Allocated %u bytes for CANopen\r\n", heapMemoryUsed);
-    }
-
-    DIGITAL_IO_SetOutputLow(&LED1);
-}
-
-/**
- * CANopen 重置處理 - 學習 STM32 模式
- */
-static CO_NMT_reset_cmd_t app_programReset(void)
-{
-    CO_ReturnError_t err;
-    uint32_t errInfo = 0;
-
-    Debug_Printf("=== CANopen Reset Start ===\r\n");
-    Debug_Printf("CANopen - Reset communication...\r\n");
-
-    /* **🔧 使用 CAN_NODE APP - 包含完整的 GPIO 和中斷配置** */
-    Debug_Printf("=== 使用 CAN_NODE 模式 ===\r\n");
-
-    /* CANopen 堆疊初始化 - 按 STM32 模式 */
-    Debug_Printf("CANopen 堆疊初始化開始...\r\n");
-    err = CO_CANopenInit(CO,
-                        NULL,                   /* 備用 NMT 指令回調 */
-                        NULL,                   /* LSS 主機回調 */
-                        OD,                     /* 物件字典 */
-                        OD_STATUS_BITS,         /* 可選狀態位 */
-                        NMT_CONTROL,            /* NMT 控制位元 */
-                        FIRST_HB_TIME,          /* 首次心跳時間 */
-                        SDO_SRV_TIMEOUT_TIME,   /* SDO 伺服器超時 */
-                        SDO_CLI_TIMEOUT_TIME,   /* SDO 客戶端超時 */
-                        SDO_CLI_BLOCK,          /* SDO 客戶端區塊傳輸 */
-                        pendingNodeId,          /* 節點 ID */
-                        &errInfo);              /* 錯誤資訊 */
-
-    Debug_Printf("CANopen 初始化結果: err=%d, errInfo=0x%X\r\n", err, errInfo);
-
-    if (err != CO_ERROR_NO && err != CO_ERROR_NODE_ID_UNCONFIGURED_LSS) {
-        errCnt_CO_init++;
-        Debug_Printf("Error: CANopen init failed (%d), info: 0x%X, count: %u\r\n", 
-                    err, errInfo, errCnt_CO_init);
-        return CO_RESET_APP;
-    } else {
-        Debug_Printf("CANopen 堆疊初始化成功\r\n");
-    }
-
-    /* 初始化 PDO - 但忽略錯誤 */
-    Debug_Printf("初始化 PDO...\r\n");
-    err = CO_CANopenInitPDO(CO, CO->em, OD, pendingNodeId, &errInfo);
-    Debug_Printf("PDO 初始化結果: err=%d, errInfo=0x%X\r\n", err, errInfo);
-    if (err != CO_ERROR_NO) {
-        Debug_Printf("Warning: PDO init returned error (%d), info: 0x%X - 繼續執行\r\n", err, errInfo);
-    } else {
-        Debug_Printf("PDO 初始化成功\r\n");
-    }
-
-    /* 啟動 CAN 模組 */
-    Debug_Printf("啟動 CAN 模組為正常模式...\r\n");
-    CO_CANsetNormalMode(CO->CANmodule);
-
-    /* 標準 CANopen 初始化和狀態設定 */
-    if (CO->NMT != NULL && CO->em != NULL) {
-        Debug_Printf("CANopen 狀態轉換程序開始...\r\n");
-        
-        /* 1. 檢查並報告當前錯誤狀態 */
-        uint8_t initial_error = *(CO->em->errorRegister);
-        Debug_Printf("初始錯誤暫存器: 0x%02X\r\n", initial_error);
-        
-        /* 2. 強制清除錯誤暫存器 */
-        *(CO->em->errorRegister) = 0;
-        Debug_Printf("錯誤暫存器已清除\r\n");
-        
-        /* 3. 檢查 NMT 狀態機是否就緒 */
-        Debug_Printf("當前 NMT 狀態: %d\r\n", CO->NMT->operatingState);
-        
-        /* 4. 使用標準 CANopen 方式進入 OPERATIONAL */
-        Debug_Printf("發送內部 NMT 指令進入 OPERATIONAL...\r\n");
-        CO_NMT_sendInternalCommand(CO->NMT, CO_NMT_ENTER_OPERATIONAL);
-        
-        /* 5. 給狀態機時間處理 */
-        for (volatile uint32_t delay = 0; delay < 10000; delay++);
-        
-        /* 6. 檢查狀態轉換結果 */
-        Debug_Printf("狀態轉換後 NMT 狀態: %d\r\n", CO->NMT->operatingState);
-        Debug_Printf("狀態轉換後錯誤暫存器: 0x%02X\r\n", *(CO->em->errorRegister));
-        
-        /* 7. 如果仍未進入 OPERATIONAL，強制設定 */
-        if (CO->NMT->operatingState != CO_NMT_OPERATIONAL) {
-            Debug_Printf("警告：標準轉換失敗，強制設定 OPERATIONAL 狀態\r\n");
-            CO->NMT->operatingState = CO_NMT_OPERATIONAL;
-            *(CO->em->errorRegister) = 0;  /* 再次清除錯誤 */
-        }
-        
-        canopen_ready = true;
-        Debug_Printf("CANopen 初始化完成：狀態=%d，錯誤=0x%02X\r\n", 
-                    CO->NMT->operatingState, *(CO->em->errorRegister));
-    }
-
-    Debug_Printf("CANopen device initialized (Node ID: %d, Bitrate: %d kbit/s)\r\n", 
-                pendingNodeId, pendingBitRate);
-
-    /* 重置計時器 */
-    CO_timer1ms = 0;
-
-    return CO_RESET_NOT;
-}
-
-/**
- * 應用程式結束
- */
-static void app_programEnd(void)
-{
-    CO_CANsetConfigurationMode(NULL);
-    CO_delete(CO);
-    Debug_Printf("Program ended\r\n");
-}
-
-/**
- * 1ms 主任務 - 專業版本，減少冗餘輸出
- */
-static void mainTask_1ms(void)
-{
-    static uint32_t ms_counter = 0;
-    
-    /* 每次檢查計時器是否需要處理 */
-    while (CO_timer1ms > ms_counter) {
-        ms_counter++;
-        
-        /* 安全檢查 - 確保CO已初始化 */
-        if (CO != NULL) {
-            /* CANopen 核心處理 - 按照標準順序 */
-            process_canopen_communication();
-            
-            /* 監控重要狀態變化 (避免頻繁輸出) */
-            if ((ms_counter % 1000) == 0) {
-                monitor_error_register();
-                handle_nmt_state_change();
-            }
-            
-            /* 輕量級 PDO 處理 */
-            process_pdo_communication();
-        }
-
-        /* 每 100ms 更新 LED */
-        if ((ms_counter % 100) == 0) {
-            app_updateLEDs();
-        }
-
-        /* 每 5000ms (5秒) 進行一次 CANopen 功能測試 */
-        if ((ms_counter % 5000) == 0 && ms_counter > 3000) {
-            send_test_can_message();
-        }
-
-        /* 每 10000ms (10秒) 輸出簡化統計 */
-        if ((ms_counter % 10000) == 0) {
-            report_canopen_statistics();
-        }
-
-        /* 檢查 RX 訊息 - 新增 */
-        if ((ms_counter % 100) == 0) {
-            check_canopen_rx_messages();
-        }
     }
 }
 
@@ -491,22 +287,7 @@ static void send_test_can_message(void)
             }
             break;
             
-        case 3: /* 測試直接 CAN 傳送 */
-            if (CO->CANmodule != NULL && CO->CANmodule->txArray != NULL) {
-                CO_CANtx_t *testTx = &CO->CANmodule->txArray[0];
-                if (!testTx->bufferFull) {
-                    testTx->ident = 0x123;
-                    testTx->DLC = 8;
-                    for (int i = 0; i < 8; i++) {
-                        testTx->data[i] = 0xA0 + test_cycle + i;
-                    }
-                    CO_CANsend(CO->CANmodule, testTx);
-                    Debug_Printf("  -> Test message sent ID=0x123\r\n");
-                }
-            }
-            break;
-            
-        case 4: /* 測試 NMT 狀態切換 */
+        case 3: /* 測試 NMT 狀態切換 */
             if (CO->NMT != NULL && CO->NMT->operatingState == CO_NMT_PRE_OPERATIONAL) {
                 /* 只在 PRE_OPERATIONAL 時嘗試切換到 OPERATIONAL */
                 Debug_Printf("  -> Requesting NMT state change to OPERATIONAL\r\n");
@@ -898,29 +679,9 @@ static int canopen_app_init(CANopenNodeXMC4800* canopenXMC4800)
         return 4;
     }
 
-    /* 🎯 XMC4800 SYSTIMER 管理 - 對應 STM32 的 Timer 處理 */
-    static uint32_t systimer_id = 0;
-    systimer_id = SYSTIMER_CreateTimer(1000, SYSTIMER_MODE_PERIODIC, 
-                                      SYSTIMER_Callback, NULL);
-    if (systimer_id != 0) {
-        /* **🎯 儲存 SYSTIMER ID 到節點結構 - 對應 STM32 timerHandle** */
-        canopenXMC4800->systimerID = systimer_id;
-        
-        SYSTIMER_STATUS_t timer_status = SYSTIMER_StartTimer(systimer_id);
-        if (timer_status == SYSTIMER_STATUS_SUCCESS) {
-            Debug_Printf_Raw("✅ SYSTIMER 1ms periodic timer created and started (ID=%lu)\r\n", systimer_id);
-        } else {
-            Debug_Printf_Raw("❌ SYSTIMER 啟動失敗: %d\r\n", timer_status);
-            return 6;
-        }
-    } else {
-        Debug_Printf_Raw("❌ SYSTIMER 創建失敗\r\n");
-        return 7;
-    }
-    
-    /* 啟動 SYSTIMER 系統 */
-    SYSTIMER_Start();
-    Debug_Printf_Raw("✅ SYSTIMER system started\r\n");
+    /* 🎯 移除 XMC4800 SYSTIMER 管理 - 改用 DAVE UI TimerHandler() */
+    /* DAVE UI TimerHandler() 已經處理 CANopen 1ms 定時功能 */
+    Debug_Printf("✅ Using DAVE UI TimerHandler() for CANopen timing\r\n");
 
     /* CANopen 回調配置 */
     if (!CO->nodeIdUnconfigured) {
@@ -950,8 +711,7 @@ static int canopen_app_resetCommunication(void)
 {
     Debug_Printf("🔄 CANopen Communication Reset\r\n");
     
-    /* 停止計時器 */
-    SYSTIMER_Stop();
+    /* DAVE UI TimerHandler() 會自動繼續運行，無需額外管理 */
     
     /* 設置配置模式 */
     CO_CANsetConfigurationMode((void*)&canopenNodeXMC4800);
@@ -1023,8 +783,7 @@ static void canopen_app_process(void)
             Debug_Printf("🔄 CANopen Communication Reset requested\r\n");
             
             /* **🎯 完整重置流程 - 參考 CanOpenSTM32** */
-            /* 1. 停止計時器 */
-            SYSTIMER_Stop();
+            /* 1. 計時器由 DAVE UI TimerHandler() 自動管理，無需手動停止 */
             
             /* 2. 設置 CAN 配置模式 */
             CO_CANsetConfigurationMode((void*)&canopenNodeXMC4800);
@@ -1045,49 +804,37 @@ static void canopen_app_process(void)
     }
 }
 
-/**
- * @brief CANopen 1ms 中斷處理 - 參考 CanOpenSTM32 的 canopen_app_interrupt
- * 此函數在 SYSTIMER 中斷中調用
- */
-static void canopen_app_interrupt(void)
-{
-    if (CO == NULL || !canopenNodeXMC4800.initialized) return;
-    
-    CO_LOCK_OD(CO->CANmodule);
-    if (!CO->nodeIdUnconfigured && CO->CANmodule->CANnormal) {
-        bool_t syncWas = false;
-        uint32_t timeDifference_us = 1000; // 1ms
-        
-#if (CO_CONFIG_SYNC) & CO_CONFIG_SYNC_ENABLE
-        syncWas = CO_process_SYNC(CO, timeDifference_us, NULL);
-#endif
-#if (CO_CONFIG_PDO) & CO_CONFIG_RPDO_ENABLE
-        CO_process_RPDO(CO, syncWas, timeDifference_us, NULL);
-#endif
-#if (CO_CONFIG_PDO) & CO_CONFIG_TPDO_ENABLE
-        CO_process_TPDO(CO, syncWas, timeDifference_us, NULL);
-#endif
-        
-        /* 進一步的 I/O 或非阻塞應用程式碼可以放在這裡 */
-    }
-    CO_UNLOCK_OD(CO->CANmodule);
-}
-
 /******************************************************************************/
-/*      🎯 SYSTIMER 中斷回調函數 - DAVE API 整合                          */
+/*      🎯 DAVE UI 專業中斷處理系統 - 統一計時管理                          */
 /******************************************************************************/
 
+/* canopen_app_interrupt 函數已移除 - 功能整合到 TimerHandler() 和 canopen_timer_process() 中 */
+
 /**
- * @brief SYSTIMER 中斷回調函數 (1ms)
- * 這個函數由 DAVE SYSTIMER APP 每 1ms 調用一次
+ * @brief DAVE UI Timer 中斷處理函數 - 專業中斷管理
+ * 
+ * 🎯 DAVE UI Integration: TimerHandler -> IRQ_Hdlr_57
+ * ⏱️ 功能: CANopen 1ms 定時處理
  */
-void SYSTIMER_Callback(void *args)
+void TimerHandler(void)
 {
-    (void)args;  /* 未使用的參數 */
+    /* 調用 CANopen Timer 處理函數 */
+    canopen_timer_process(CO);
     
-    /* 更新全域 1ms 計時器 */
-    CO_timer1ms++;
-    
-    /* 調用 CANopen 專業中斷處理 - 參考 CanOpenSTM32 */
-    canopen_app_interrupt();
+    /* 清除 DAVE Timer 事件 */
+    TIMER_ClearEvent(&TIMER_0);
 }
+
+/**
+ * @brief DAVE UI CAN 中斷處理函數 - 專業中斷管理
+ * 
+ * 🎯 DAVE UI Integration: CAN_Handler -> IRQ_Hdlr_77  
+ * 📡 功能: CAN 收發中斷處理
+ */
+void CAN_Handler(void)
+{
+    /* 調用 CANopen CAN 中斷處理函數 */
+    canopen_can_interrupt_process();
+}
+
+/* test_dave_api_basic() 函數及其測試程式碼已移除 - 不再需要基本 DAVE API 測試 */

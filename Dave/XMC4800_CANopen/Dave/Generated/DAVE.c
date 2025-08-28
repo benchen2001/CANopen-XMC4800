@@ -84,11 +84,6 @@ __WEAK DAVE_STATUS_t DAVE_Init(void)
    } 
   if (init_status == DAVE_STATUS_SUCCESS)
   {
-	 /**  Initialization of SYSTIMER APP instance SYSTIMER_0 */
-	 init_status = (DAVE_STATUS_t)SYSTIMER_Init(&SYSTIMER_0); 
-   } 
-  if (init_status == DAVE_STATUS_SUCCESS)
-  {
 	 /**  Initialization of DIGITAL_IO APP instance LED1 */
 	 init_status = (DAVE_STATUS_t)DIGITAL_IO_Init(&LED1); 
    } 
@@ -96,6 +91,21 @@ __WEAK DAVE_STATUS_t DAVE_Init(void)
   {
 	 /**  Initialization of CAN_NODE APP instance CAN_NODE_0 */
 	 init_status = (DAVE_STATUS_t)CAN_NODE_Init(&CAN_NODE_0); 
+   } 
+  if (init_status == DAVE_STATUS_SUCCESS)
+  {
+	 /**  Initialization of INTERRUPT APP instance TIMER_INTERRUPT_0 */
+	 init_status = (DAVE_STATUS_t)INTERRUPT_Init(&TIMER_INTERRUPT_0); 
+   } 
+  if (init_status == DAVE_STATUS_SUCCESS)
+  {
+	 /**  Initialization of INTERRUPT APP instance CAN_INTERRUPT_1 */
+	 init_status = (DAVE_STATUS_t)INTERRUPT_Init(&CAN_INTERRUPT_1); 
+   } 
+  if (init_status == DAVE_STATUS_SUCCESS)
+  {
+	 /**  Initialization of TIMER APP instance TIMER_0 */
+	 init_status = (DAVE_STATUS_t)TIMER_Init(&TIMER_0); 
    }  
   return init_status;
 } /**  End of function DAVE_Init */

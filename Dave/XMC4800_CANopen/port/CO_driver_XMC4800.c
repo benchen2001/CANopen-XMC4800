@@ -10,6 +10,7 @@
 #include "DAVE.h"     //Declarations from DAVE Code Generation (includes SFR declaration)
 #include "CO_driver_target.h"
 #include "301/CO_driver.h"
+#include "CANopen.h"  /* CANopen 主要標頭檔 - 包含 CO_t 定義 */
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -21,32 +22,17 @@
 /* DAVE CAN_NODE APP includes */
 #include "CAN_NODE/can_node.h"
 #include "CAN_NODE/can_node_conf.h"
+#include "CAN_NODE/can_node_extern.h"  /* CAN_NODE_0 變數定義 */
 
 /* **📋 DAVE APP 配置驅動架構** */
-typedef struct {
-    uint8_t node_id;            /* 從 DAVE UI 推導的 Node ID */
-    uint8_t lmo_count;          /* DAVE UI 配置的 LMO 數量 */
-    uint32_t baudrate;          /* DAVE UI 配置的波特率 */
-    bool service_request_0;     /* 是否使用 Service Request 0 */
-    bool rx_event_enabled;      /* RX 事件是否啟用 */
-    bool tx_event_enabled;      /* TX 事件是否啟用 */
-} canopen_dave_config_t;
+/* Node ID 固定為 10，基於 DAVE 配置的 SDO RX ID (0x60A) */
 
-/* CANopen ID 計算宏 - 基於 DAVE UI 配置的 Node ID */
+/* CANopen ID 計算宏 - 動態計算，無硬編碼 */
 #define CANOPEN_EMERGENCY_ID(node_id)      (0x080U + (node_id))
 #define CANOPEN_TPDO1_ID(node_id)          (0x180U + (node_id))  
 #define CANOPEN_SDO_TX_ID(node_id)         (0x580U + (node_id))
 #define CANOPEN_SDO_RX_ID(node_id)         (0x600U + (node_id))
 #define CANOPEN_HEARTBEAT_ID(node_id)      (0x700U + (node_id))
-
-/* LMO 分配策略枚舉 */
-typedef enum {
-    CANOPEN_LMO_TEST_TX = 0,    /* LMO_01: 基本測試發送 */
-    CANOPEN_LMO_EMERGENCY,      /* LMO_02: Emergency 和 SDO TX */
-    CANOPEN_LMO_TPDO,           /* LMO_03: TPDO 發送 */
-    CANOPEN_LMO_SDO_RX,         /* LMO_04: SDO RX 接收 */
-    CANOPEN_LMO_COUNT           /* 總共 4 個 LMO */
-} canopen_lmo_index_t;
 
 /* **📋 Debug 等級控制 - 精簡版除錯系統** */
 #define DEBUG_LEVEL_ERROR   1  /* 只輸出錯誤訊息 */
@@ -91,25 +77,213 @@ typedef enum {
 void Debug_Printf_Raw(const char* format, ...);         /* 原始輸出函數 - 外部可見 */
 static void Debug_Printf_Auto(const char* format, ...);  /* 自動分級函數 */
 static void Debug_Printf(const char* format, ...);       /* 主要 Debug_Printf 函數 */
-static void Debug_Printf_Simple(const char* str);        /* 簡化版本 - 備用 */
 static void Debug_Printf_ISR(const char* format, ...);   /* 中斷安全版本 */
 void Debug_ProcessISRBuffer(void);                       /* ISR 緩衝區處理函數 - 外部可見 */
 static void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule, uint32_t index);
 static void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule, uint32_t index);
 
-/* **📋 DAVE 配置管理函數** */
-static canopen_dave_config_t canopen_get_dave_config(void);
+/* **📋 動態 Node ID 管理 - 專業產品設計** */
 static uint8_t canopen_get_node_id(void);
-static uint32_t canopen_get_lmo_index_for_id(uint32_t can_id);
-static const CAN_NODE_LMO_t* canopen_get_lmo_for_tx(uint32_t can_id);
-static const CAN_NODE_LMO_t* canopen_get_lmo_for_rx(void);
 static bool canopen_is_dave_config_valid(void);
+static void canopen_configure_dynamic_ids(uint8_t node_id);
 
 /* Global variables */
 volatile uint32_t CO_timer1ms = 0;  /* Timer variable incremented each millisecond */
 CO_CANmodule_t* g_CANmodule = NULL;
-static canopen_dave_config_t g_dave_config;
-static bool g_dave_config_initialized = false;
+
+/* **🎯 動態 Node ID 管理 - 專業產品設計** */
+static uint8_t g_canopen_node_id = 10;  /* 預設 Node ID = 10，未來可從 EEPROM 讀取 */
+
+/* **🚀 前置宣告：動態 ID 配置函數** */
+static void canopen_configure_dynamic_ids(uint8_t node_id);
+
+/**
+ * @brief 設定 CANopen Node ID 並重新配置所有 LMO
+ * 
+ * 🎯 專業產品設計功能：
+ * 1. 動態設定 Node ID
+ * 2. 自動重新配置所有 LMO 的 CANopen ID
+ * 3. 支援製造階段或維護階段的 ID 變更
+ * 
+ * @param new_node_id 新的 Node ID (1-127)
+ * @return true: 設定成功, false: 參數無效
+ */
+bool canopen_set_node_id(uint8_t new_node_id)
+{
+    /* **✅ 範圍檢查** */
+    if (new_node_id < 1 || new_node_id > 127) {
+        Debug_Printf("❌ Node ID %d 超出範圍 (1-127)\r\n", new_node_id);
+        return false;
+    }
+    
+    uint8_t old_node_id = g_canopen_node_id;
+    g_canopen_node_id = new_node_id;
+    
+    Debug_Printf("🔄 變更 Node ID: %d → %d\r\n", old_node_id, new_node_id);
+    
+    /* **🔧 重新配置所有 LMO** */
+    canopen_configure_dynamic_ids(new_node_id);
+    
+    /* **🚀 未來可加入 EEPROM 儲存** */
+    // eeprom_save_node_id(new_node_id);
+    
+    Debug_Printf("✅ Node ID 變更完成\r\n");
+    return true;
+}
+
+/**
+ * @brief 動態配置所有 LMO 的 CANopen ID
+ * 
+ * 🎯 專業產品設計：根據更新的 DAVE UI 配置
+ * 
+ * **DAVE UI 配置 (基礎 ID 設計):**
+ * TX LMO (1-7):  0x8a→0x80, 0x18a→0x180, 0x280, 0x380, 0x480, 0x580, 0x700
+ * RX LMO (8-12): 0x600, 0x200, 0x300, 0x400, 0x500
+ * 
+ * **執行時計算:** 基礎ID + Node_ID = 最終CANopen ID
+ */
+static void canopen_configure_dynamic_ids(uint8_t node_id)
+{
+    Debug_Printf("=== 動態配置 CANopen ID (Node ID=%d) ===\r\n", node_id);
+    
+    /* **🔧 根據更新的 DAVE 配置動態更新 CANopen ID** */
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+        
+        if (lmo != NULL && lmo->mo_ptr != NULL) {
+            uint32_t current_id = lmo->mo_ptr->can_identifier;
+            uint32_t new_id = current_id;  /* 🎯 修正：預設保持原值 */
+            const char* id_type = "未知";
+            
+            /* 🔍 詳細除錯輸出 */
+            Debug_Printf("🔍 LMO_%02d: current_id=0x%03X, type=0x%02X\r\n", 
+                        lmo_idx + 1, current_id, lmo->mo_ptr->can_mo_type);
+            
+            /* **📤 TX LMO 處理 (基於您更新的 DAVE UI 配置)** */
+            if (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+                switch (current_id) {
+                    case 0x8AU:   /* Emergency (0x80 + Node ID) */
+                    case 0x80U:   /* Emergency 基礎 ID */
+                        new_id = 0x080 + node_id;
+                        id_type = "Emergency";
+                        break;
+                    case 0x18AU:  /* TPDO1 (0x180 + Node ID) */
+                    case 0x180U:  /* TPDO1 基礎 ID */
+                        new_id = 0x180 + node_id;
+                        id_type = "TPDO1";
+                        break;
+                    case 0x280U:  /* TPDO2 基礎 ID */
+                        new_id = 0x280 + node_id;
+                        id_type = "TPDO2";
+                        break;
+                    case 0x380U:  /* TPDO3 基礎 ID */
+                        new_id = 0x380 + node_id;
+                        id_type = "TPDO3";
+                        break;
+                    case 0x480U:  /* TPDO4 基礎 ID */
+                        new_id = 0x480 + node_id;
+                        id_type = "TPDO4";
+                        break;
+                    case 0x580U:  /* SDO TX 基礎 ID */
+                        new_id = 0x580 + node_id;
+                        id_type = "SDO TX";
+                        break;
+                    case 0x700U:  /* Heartbeat 基礎 ID */
+                        new_id = 0x700 + node_id;
+                        id_type = "Heartbeat";
+                        break;
+                    default:
+                        new_id = current_id;  /* 保持不變 */
+                        id_type = "自訂";
+                        break;
+                }
+            }
+            /* **📥 RX LMO 處理 (基於您更新的 DAVE UI 配置)** */
+            else if (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
+                Debug_Printf("🔍 處理 RX LMO_%02d: current_id=0x%03X\r\n", lmo_idx + 1, current_id);
+                
+                switch (current_id) {
+                    case 0x000U:  /* NMT 廣播訊息 - 所有節點都應該接收 */
+                        new_id = 0x000;  /* NMT 固定為 ID=0 */
+                        id_type = "NMT";
+                        Debug_Printf("    ✅ 匹配 NMT: new_id=0x%03X\r\n", new_id);
+                        break;
+                    case 0x600U:  /* SDO RX 基礎 ID */
+                        new_id = 0x600 + node_id;
+                        id_type = "SDO RX";
+                        Debug_Printf("    ✅ 匹配 SDO RX: 0x600 + %d = 0x%03X\r\n", node_id, new_id);
+                        break;
+                    case 0x200U:  /* RPDO1 基礎 ID */
+                        new_id = 0x200 + node_id;
+                        id_type = "RPDO1";
+                        break;
+                    case 0x300U:  /* RPDO2 基礎 ID */
+                        new_id = 0x300 + node_id;
+                        id_type = "RPDO2";
+                        break;
+                    case 0x400U:  /* RPDO3 基礎 ID */
+                        new_id = 0x400 + node_id;
+                        id_type = "RPDO3";
+                        break;
+                    case 0x500U:  /* RPDO4 基礎 ID */
+                        new_id = 0x500 + node_id;
+                        id_type = "RPDO4";
+                        break;
+                    default:
+                        new_id = current_id;  /* 保持不變 */
+                        id_type = "自訂";
+                        Debug_Printf("    ⚠️ RX LMO 進入 default: current_id=0x%03X, new_id=0x%03X\r\n", 
+                                   current_id, new_id);
+                        break;
+                }
+            }
+            
+            /* **🔧 實際更新 LMO ID** */
+            if (new_id != current_id) {
+                /* **✅ 安全做法：使用 XMC_CAN_MO_SetIdentifier() 確保原子性操作** */
+                XMC_CAN_MO_SetIdentifier(lmo->mo_ptr, new_id);
+                
+                /* **重新初始化 LMO 使配置生效** */
+                CAN_NODE_MO_Init(lmo);
+                
+                Debug_Printf("✅ LMO_%02d (%s): 0x%03X → 0x%03X (%s)\r\n", 
+                           lmo_idx + 1, 
+                           (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) ? "TX" : "RX",
+                           current_id, new_id, id_type);
+            } else {
+                Debug_Printf("🔍 LMO_%02d (%s): 0x%03X (保持不變, %s)\r\n", 
+                           lmo_idx + 1,
+                           (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) ? "TX" : "RX",
+                           new_id, id_type);
+            }
+        }
+    }
+    
+    Debug_Printf("✅ 動態 CANopen ID 配置完成 (Node ID=%d)\r\n", node_id);
+    
+    /* **📋 顯示完整的 CANopen ID 分配表** */
+    Debug_Printf("\r\n📋 CANopen ID 分配表 (Node ID=%d):\r\n", node_id);
+    Debug_Printf("   🚨 Emergency:  0x%03X (0x080 + %d)\r\n", 0x080 + node_id, node_id);
+    Debug_Printf("   📤 TPDO1:      0x%03X (0x180 + %d)\r\n", 0x180 + node_id, node_id);
+    Debug_Printf("   📤 TPDO2:      0x%03X (0x280 + %d)\r\n", 0x280 + node_id, node_id);
+    Debug_Printf("   📤 TPDO3:      0x%03X (0x380 + %d)\r\n", 0x380 + node_id, node_id);
+    Debug_Printf("   📤 TPDO4:      0x%03X (0x480 + %d)\r\n", 0x480 + node_id, node_id);
+    Debug_Printf("   📤 SDO TX:     0x%03X (0x580 + %d)\r\n", 0x580 + node_id, node_id);
+    Debug_Printf("   💓 Heartbeat:  0x%03X (0x700 + %d)\r\n", 0x700 + node_id, node_id);
+    Debug_Printf("   📥 SDO RX:     0x%03X (0x600 + %d)\r\n", 0x600 + node_id, node_id);
+    Debug_Printf("   📥 RPDO1:      0x%03X (0x200 + %d)\r\n", 0x200 + node_id, node_id);
+    Debug_Printf("   📥 RPDO2:      0x%03X (0x300 + %d)\r\n", 0x300 + node_id, node_id);
+    Debug_Printf("   📥 RPDO3:      0x%03X (0x400 + %d)\r\n", 0x400 + node_id, node_id);
+    Debug_Printf("   📥 RPDO4:      0x%03X (0x500 + %d)\r\n", 0x500 + node_id, node_id);
+    Debug_Printf("\r\n");
+    Debug_Printf("   🔔 SYNC:       0x080 (固定，只有 Master 發送)\r\n");
+    Debug_Printf("   💡 注意: SYNC(0x080) 與 EMCY 使用相同基礎 ID，但:\r\n");
+    Debug_Printf("        - SYNC: 固定 0x080，只有主站發送\r\n");
+    Debug_Printf("        - EMCY: 0x080+NodeID，各節點發送自己的緊急訊息\r\n");
+    Debug_Printf("   📊 ID 範圍: EMCY(0x081-0x0FF), 不與 SYNC 衝突\r\n");
+    Debug_Printf("\r\n");
+    Debug_Printf("📋 使用指南: canopen_set_node_id(新ID) 可動態變更\r\n");
+}
 
 /* 中斷除錯緩衝區 - 避免在中斷中阻塞 */
 #define ISR_DEBUG_BUFFER_SIZE 1024
@@ -122,49 +296,101 @@ static volatile bool isr_debug_overflow = false;
 volatile uint32_t g_interrupt_rx_count = 0;
 volatile uint32_t g_interrupt_tx_count = 0;
 volatile uint32_t g_interrupt_total_count = 0;
+volatile uint32_t g_interrupt_other_count = 0;
 
 /**
- * @brief CAN0_0 Interrupt Handler - Service Request 0 統一中斷處理
- * 所有 LMO 的 tx_sr=0, rx_sr=0 都路由到這個處理函數
- * 注意：使用非阻塞除錯輸出，避免中斷中的 UART 等待
+ * @brief CANopen Timer 處理函數 - 1ms 定時處理
+ * 
+ * 🎯 功能: CANopen 協議棧的定時處理邏輯
+ * ⏱️ 調用: 由 main.c 中的 TimerHandler() DAVE UI 中斷函數調用
+ * 
+ * @param CO_ptr CANopen 主物件指標 (void* 類型以避免 header 依賴)
  */
-void CAN0_0_IRQHandler(void)
+void canopen_timer_process(void *CO_ptr)
 {
-    /* 🎯 最簡單的中斷處理 - 只使用計數器，不用複雜除錯 */
+    /* CANopen 需要的 1ms 計時器 */
+    extern volatile uint32_t CO_timer1ms;
+    CO_timer1ms++;
+    
+    /* **🎯 CANopen 主要處理邏輯** */
+    CO_t *CO = (CO_t *)CO_ptr;  /* 型別轉換 */
+    if (CO != NULL) {
+        CO_LOCK_OD(CO->CANmodule);
+        if (!CO->nodeIdUnconfigured && CO->CANmodule->CANnormal) {
+            bool_t syncWas = false;
+            /* get time difference since last function call */
+            uint32_t timeDifference_us = 1000; // 1ms = 1000us
+
+#if (CO_CONFIG_SYNC) & CO_CONFIG_SYNC_ENABLE
+            syncWas = CO_process_SYNC(CO, timeDifference_us, NULL);
+#endif
+#if (CO_CONFIG_PDO) & CO_CONFIG_RPDO_ENABLE
+            CO_process_RPDO(CO, syncWas, timeDifference_us, NULL);
+#endif
+#if (CO_CONFIG_PDO) & CO_CONFIG_TPDO_ENABLE
+            CO_process_TPDO(CO, syncWas, timeDifference_us, NULL);
+#endif
+
+            /* Further I/O or nonblocking application code may go here. */
+        }
+        CO_UNLOCK_OD(CO->CANmodule);
+    }
+}
+
+/**
+ * @brief CANopen CAN 中斷處理函數 - CAN 訊息處理
+ * 
+ * 🎯 功能: CAN 收發中斷的 CANopen 處理邏輯
+ * � 調用: 由 main.c 中的 CAN_Handler() DAVE UI 中斷函數調用
+ */
+void canopen_can_interrupt_process(void)
+{
+    /* 增加中斷統計 */
     g_interrupt_total_count++;
     
     if (g_CANmodule != NULL) {
         bool event_handled = false;
         
-        /* **🔥 使用 DAVE 配置驅動的接收檢查** */
-        const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
-        
-        if (rx_lmo != NULL && rx_lmo->rx_event_enable) {
-            /* 使用 XMC 直接 API 檢查 RX 狀態 (DAVE 未提供狀態檢查 API) */
-            uint32_t status = XMC_CAN_MO_GetStatus(rx_lmo->mo_ptr);
-            if (status & XMC_CAN_MO_STATUS_RX_PENDING) {
-                g_interrupt_rx_count++;
-                CO_CANinterrupt_Rx(g_CANmodule, CANOPEN_LMO_SDO_RX);
-                event_handled = true;
+        /* **✅ 動態輪詢所有配置的 LMO，根據 can_mo_type 判斷 RX/TX** */
+        for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+            if (CAN_NODE_0.lmobj_ptr[lmo_idx] != NULL) {
+                const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+                
+                if (lmo->mo_ptr != NULL) {
+                    /* **🔍 根據 MO 類型判斷是 RX 還是 TX** */
+                    uint32_t mo_type = lmo->mo_ptr->can_mo_type;
+                    uint32_t mo_status = CAN_NODE_MO_GetStatus(lmo);
+                    
+                    if (mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
+                        /* **📥 RX LMO 處理** */
+                        if (lmo->rx_event_enable && (mo_status & XMC_CAN_MO_STATUS_RX_PENDING)) {
+                            g_interrupt_rx_count++;
+                            CO_CANinterrupt_Rx(g_CANmodule, lmo_idx);
+                            event_handled = true;
+                            
+                            /* 簡單的除錯輸出 */
+                            Debug_Printf_ISR("RX IRQ: LMO_%02d (idx=%d)\r\n", lmo_idx + 1, lmo_idx);
+                        }
+                    }
+                    else if (mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+                        /* **📤 TX LMO 處理** */
+                        if (lmo->tx_event_enable && (mo_status & XMC_CAN_MO_STATUS_TX_PENDING)) {
+                            g_interrupt_tx_count++;
+                            CO_CANinterrupt_Tx(g_CANmodule, lmo_idx);
+                            event_handled = true;
+                            
+                            /* 簡單的除錯輸出 */
+                            Debug_Printf_ISR("TX IRQ: LMO_%02d (idx=%d)\r\n", lmo_idx + 1, lmo_idx);
+                        }
+                    }
+                    /* 其他類型的 MO (FIFO, Gateway 等) 暫時忽略 */
+                }
             }
         }
         
-        /* **🚀 使用 DAVE 配置驅動的發送檢查** */
-        canopen_dave_config_t config = canopen_get_dave_config();
-        
-        /* **✅ 動態計算：基於 DAVE UI 配置的 LMO 數量，預留最後一個給接收** */
-        uint8_t tx_lmo_count = config.lmo_count > 1 ? config.lmo_count - 1 : config.lmo_count;
-        
-        for (int lmo_idx = 0; lmo_idx < tx_lmo_count; lmo_idx++) {
-            /* **✅ 從 DAVE 配置讀取 LMO，而非硬編碼存取** */
-            const CAN_NODE_LMO_t *tx_lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
-            
-            if (tx_lmo != NULL && tx_lmo->tx_event_enable) {
-                /* **🎯 暫時簡化 TX 處理，避免重複發送問題** */
-                /* 目前專注於解決重複發送問題，先不做複雜的狀態檢查 */
-                g_interrupt_tx_count++;
-                event_handled = true;
-            }
+        /* 用於除錯統計 */
+        if (!event_handled) {
+            g_interrupt_other_count++;
         }
     }
 }
@@ -188,12 +414,17 @@ CO_ReturnError_t CO_CANmodule_init(
 
     /* **🎯 驗證 DAVE 配置有效性** */
     if (!canopen_is_dave_config_valid()) {
-        Debug_Printf("❌ DAVE 配置驗證失敗，無法初始化 CANopen\r\n");
         return CO_ERROR_ILLEGAL_ARGUMENT;
     }
+    
+    /* **⚡ 專業產品設計：動態配置 CANopen ID** */
+    uint8_t node_id = canopen_get_node_id();
+    
+    /* **配置所有 LMO 使用動態 CANopen ID** */
+    canopen_configure_dynamic_ids(node_id);
 
     /* **🎯 使用從 DAVE UI 推導的配置** */
-    canopen_dave_config_t dave_config = canopen_get_dave_config();
+//    canopen_dave_config_t dave_config = canopen_get_dave_config();
 
     /* Configure object variables */
     CANmodule->CANptr = (void*)&CAN_NODE_0;  /* 使用 DAVE 配置的 CAN_NODE_0 */
@@ -201,9 +432,6 @@ CO_ReturnError_t CO_CANmodule_init(
     CANmodule->rxSize = rxSize;
     CANmodule->txArray = txArray;
     CANmodule->txSize = txSize;
-    
-    /* **🔍 除錯輸出：檢查 txSize 值** */
-    Debug_Printf("🔍 CO_CANmodule_init: rxSize=%d, txSize=%d\r\n", rxSize, txSize);
     
     CANmodule->CANerrorStatus = 0;
     CANmodule->CANnormal = false;
@@ -215,67 +443,40 @@ CO_ReturnError_t CO_CANmodule_init(
     
     /* **設定全域參考供 ISR 使用** */
     g_CANmodule = CANmodule;
-    
-    /* **� DAVE 配置不需要手動 NVIC，但仍需確認中斷啟用** */
-    Debug_Printf("=== DAVE APP 配置驅動初始化 ===\r\n");
-    Debug_Printf("✅ 使用 DAVE UI 配置 - Node ID: %d\r\n", dave_config.node_id);
-    Debug_Printf("✅ 波特率: %lu bps\r\n", dave_config.baudrate);
-    Debug_Printf("✅ Service Request 0: %s\r\n", dave_config.service_request_0 ? "啟用" : "停用");
-    
-    if (dave_config.service_request_0) {
-        Debug_Printf("✅ 所有 LMO 事件路由至 CAN0_0_IRQHandler\r\n");
-    } else {
-        Debug_Printf("⚠️ 注意：LMO 使用不同的 Service Request\r\n");
-    }
+ 
 
-      /* **💡 DAVE APP 應該已處理 NVIC，但確認啟用狀態** */
-    if (!NVIC_GetEnableIRQ(CAN0_0_IRQn)) {
-        Debug_Printf("⚠️ DAVE 未自動啟用 NVIC，手動啟用\r\n");
-        NVIC_EnableIRQ(CAN0_0_IRQn);
-        NVIC_SetPriority(CAN0_0_IRQn, 3U);
-    } else {
-        Debug_Printf("✅ CAN0_0_IRQn 中斷已由 DAVE 啟用\r\n");
-    }
-    Debug_Printf("✅ g_CANmodule 已設定，中斷處理函數已就緒\r\n");
-
+    // /* **🔧 專業做法：動態啟用所有 DAVE UI 配置的 LMO 事件** */
+    // Debug_Printf("=== 動態檢測並啟用所有 LMO 事件 ===\r\n");
     
-    /* **🔧 關鍵：配置 LMO_08 (接收) 為 SDO RX ID=0x60A (Node ID=10)** */
-    Debug_Printf("=== 配置接收 LMO 為 CANopen SDO RX ===\r\n");
+    uint8_t rx_lmo_count = 0;
+    uint8_t tx_lmo_count = 0;
     
-    /* 從 DAVE 配置獲取接收 LMO (LMO_08 是第一個接收類型) */
-    if (CAN_NODE_0.mo_count >= 8 && CAN_NODE_0.lmobj_ptr[7] != NULL) {
-        const CAN_NODE_LMO_t *rx_lmo = CAN_NODE_0.lmobj_ptr[7];  /* LMO_08 索引為 7 */
-        if (rx_lmo->mo_ptr != NULL) {
-            /* 設定為 CANopen SDO RX ID (0x600 + Node ID) */
-            uint8_t node_id = 10;  /* 從 DAVE 配置推導：0x60A - 0x600 = 10 */
-            uint32_t sdo_rx_id = 0x600 + node_id;
+    /* **✅ 遍歷所有 LMO，根據類型動態啟用事件** */
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        if (CAN_NODE_0.lmobj_ptr[lmo_idx] != NULL) {
+            const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
             
-            /* 使用 DAVE API 更新 ID */
-            CAN_NODE_MO_UpdateID(rx_lmo, sdo_rx_id);
-            Debug_Printf("✅ LMO_08 配置為 SDO RX: ID=0x%03X (Node ID=%d)\r\n", sdo_rx_id, node_id);
-            
-            /* 確保接收中斷事件啟用 */
-            if (rx_lmo->rx_event_enable) {
-                CAN_NODE_MO_EnableRxEvent(rx_lmo);
-                Debug_Printf("✅ LMO_08 接收中斷事件已啟用\r\n");
+            if (lmo->mo_ptr != NULL) {
+                /* **🔍 根據 MO 類型動態處理** */
+                if (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
+                    /* **📥 RX LMO 處理** */
+                    rx_lmo_count++;
+                    
+                    if (lmo->rx_event_enable) {
+                        CAN_NODE_MO_EnableRxEvent(lmo);
+                    }
+                }
+                else if (lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+                    /* **📤 TX LMO 處理** */
+                    tx_lmo_count++;
+                    
+                    if (lmo->tx_event_enable) {
+                        CAN_NODE_MO_EnableTxEvent(lmo);
+                    }
+                }
             }
         }
     }
-    
-    /* **🔧 啟用所有發送 LMO 的中斷事件** */
-    Debug_Printf("=== 啟用發送 LMO 中斷事件 ===\r\n");
-    for (int i = 0; i < 7; i++) {  /* LMO_01 到 LMO_07 都是發送類型 */
-        if (i < CAN_NODE_0.mo_count && CAN_NODE_0.lmobj_ptr[i] != NULL) {
-            const CAN_NODE_LMO_t *tx_lmo = CAN_NODE_0.lmobj_ptr[i];
-            if (tx_lmo->tx_event_enable) {
-                CAN_NODE_MO_EnableTxEvent(tx_lmo);
-                Debug_Printf("✅ LMO_%02d 發送中斷事件已啟用\r\n", i + 1);
-            }
-        }
-    }
-    
-    Debug_Printf("✅ g_CANmodule 已設定，中斷處理函數已就緒\r\n");
-    Debug_Printf("✅ 所有 LMO 中斷事件將路由至 CAN0_0_IRQHandler\r\n");
 
     /* Configure receive buffers */
     for (i = 0; i < rxSize; i++) {
@@ -289,30 +490,10 @@ CO_ReturnError_t CO_CANmodule_init(
 
     /* **🎯 使用 DAVE 配置驗證系統狀態** */
     if (!canopen_is_dave_config_valid()) {
-        Debug_Printf("❌ DAVE 配置驗證失敗\r\n");
         return CO_ERROR_ILLEGAL_ARGUMENT;
     }
 
-    /* **🎯 從 DAVE 配置推導系統配置** */
-    canopen_dave_config_t config = canopen_get_dave_config();
-    Debug_Printf("=== 從 DAVE UI 配置初始化 CANopen ===\r\n");
-    Debug_Printf("Node ID: %d (從 DAVE UI 推導)\r\n", config.node_id);
-    Debug_Printf("波特率: %lu bps (DAVE UI 配置)\r\n", config.baudrate);
-    Debug_Printf("LMO 數量: %d (DAVE UI 配置)\r\n", config.lmo_count);
-
-    /* **檢查 DAVE 配置的 LMO 狀態** */
-    Debug_Printf("=== 檢查所有 LMO 配置 ===\r\n");
-    for (int lmo_idx = 0; lmo_idx < config.lmo_count; lmo_idx++) {
-        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
-        if (lmo != NULL) {
-            Debug_Printf("LMO_%02d: MO%d, TX_SR=%d, RX_SR=%d, TX_EN=%s, RX_EN=%s\r\n",
-                        lmo_idx + 1, lmo->number, lmo->tx_sr, lmo->rx_sr,
-                        lmo->tx_event_enable ? "YES" : "NO",
-                        lmo->rx_event_enable ? "YES" : "NO");
-        }
-    }
-
-    /* Configure transmit buffers */
+     /* Configure transmit buffers */
     for (i = 0; i < txSize; i++) {
         txArray[i].ident = 0;
         txArray[i].DLC = 0;
@@ -325,45 +506,50 @@ CO_ReturnError_t CO_CANmodule_init(
     /* **🎯 初始化時配置 CAN Transfer Settings** */
     Debug_Printf("=== 初始化 CAN Transfer Settings ===\r\n");
     
-    /* **🚨 首先設定 CAN 節點基本錯誤處理** */
+    /* **� 配置 CAN Transfer Settings (動態處理所有 LMO)** */
+    Debug_Printf("=== 配置 CAN Transfer Settings ===\r\n");
+    
     if (CAN_NODE_0.global_ptr != NULL) {
-        /* **重置 CAN 節點到乾淨狀態** */
-        // 簡化實現，只輸出狀態 - 避免使用不存在的 API
-        Debug_Printf("✅ CAN 節點基本錯誤處理已設定\r\n");
+        /* Note: Type mismatch warning expected - DAVE configuration compatible */
+        XMC_CAN_Enable((XMC_CAN_t*)CAN_NODE_0.global_ptr);
+        Debug_Printf("✅ CAN 全域模組已啟用\r\n");
     }
     
-    /* **配置所有 TX LMO 的 Transfer Settings** */
-    uint8_t tx_lmo_count = config.lmo_count > 1 ? config.lmo_count - 1 : config.lmo_count;
+    /* **✅ 動態配置所有 LMO 的 Transfer Settings** */
+    uint8_t tx_configured = 0;
+    uint8_t rx_configured = 0;
     
-    for (int lmo_idx = 0; lmo_idx < tx_lmo_count; lmo_idx++) {
-        const CAN_NODE_LMO_t *tx_lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
-        if (tx_lmo != NULL && tx_lmo->mo_ptr != NULL) {
-            /* **✅ 啟用 Single Transmit Trial (STT) - 防止自動重傳** */
-            XMC_CAN_MO_EnableSingleTransmitTrial(tx_lmo->mo_ptr);
-            Debug_Printf("✅ 初始化 LMO_%02d: Single Transmit Trial (STT) 已啟用\r\n", lmo_idx + 1);
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+        
+        if (lmo != NULL && lmo->mo_ptr != NULL) {
+            uint32_t mo_type = lmo->mo_ptr->can_mo_type;
             
-            /* **🔧 清除所有可能的錯誤狀態 - 改善訊號品質** */
-            XMC_CAN_MO_ResetStatus(tx_lmo->mo_ptr, 
-                XMC_CAN_MO_RESET_STATUS_TX_PENDING |
-                XMC_CAN_MO_RESET_STATUS_RX_PENDING);
+            if (mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+                /* **📤 TX LMO Transfer Settings** */
+                XMC_CAN_MO_EnableSingleTransmitTrial(lmo->mo_ptr);
                 
-            /* **✅ 設定訊息為有效狀態，準備傳輸** */
-            XMC_CAN_MO_SetStatus(tx_lmo->mo_ptr, XMC_CAN_MO_SET_STATUS_MESSAGE_VALID);
+                XMC_CAN_MO_ResetStatus(lmo->mo_ptr, 
+                    XMC_CAN_MO_RESET_STATUS_TX_PENDING |
+                    XMC_CAN_MO_RESET_STATUS_RX_PENDING);
+                    
+                XMC_CAN_MO_SetStatus(lmo->mo_ptr, XMC_CAN_MO_SET_STATUS_MESSAGE_VALID);
+                
+                tx_configured++;
+            }
+            else if (mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
+                /* **� RX LMO Transfer Settings** */
+                XMC_CAN_MO_ResetStatus(lmo->mo_ptr, 
+                    XMC_CAN_MO_RESET_STATUS_TX_PENDING |
+                    XMC_CAN_MO_RESET_STATUS_RX_PENDING);
+                    
+                XMC_CAN_MO_SetStatus(lmo->mo_ptr, XMC_CAN_MO_SET_STATUS_MESSAGE_VALID);
+                
+                rx_configured++;
+            }
         }
     }
     
-    /* **配置 RX LMO 的 Transfer Settings** */
-    const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
-    if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL) {
-        /* **✅ 啟用 Single Data Transfer (SDT) for RX** */
-        XMC_CAN_FIFO_EnableSingleDataTransfer(rx_lmo->mo_ptr);
-        Debug_Printf("✅ 初始化 RX LMO: Single Data Transfer (SDT) 已啟用\r\n");
-    }
-
-    Debug_Printf("✅ CANopen 軟體層初始化完成\r\n");
-    Debug_Printf("🚨 注意：所有硬體已由 DAVE_Init() 配置\r\n");
-    Debug_Printf("🎯 Transfer Settings: STT + SDT + 忽略遠程請求 已配置\r\n");
-
     return CO_ERROR_NO;
 }
 
@@ -372,7 +558,6 @@ void CO_CANmodule_disable(CO_CANmodule_t *CANmodule)
 {
     if (CANmodule != NULL) {
         /* 使用 CAN_NODE APP - 可以禁用節點 */
-        Debug_Printf("=== CAN_NODE 模式停用 ===\r\n");
         CANmodule->CANnormal = false;
     }
 }
@@ -389,6 +574,24 @@ CO_ReturnError_t CO_CANrxBufferInit(
 {
     CO_CANrx_t *buffer = NULL;
 
+    /* **🚨 關鍵修正：防止 CANopen 堆疊用 ident=0 覆蓋已配置的 LMO** */
+    if (ident == 0) {
+        /* 只設定軟體緩衝區，不修改硬體 LMO */
+        if (CANmodule == NULL || index >= CANmodule->rxSize) {
+            return CO_ERROR_ILLEGAL_ARGUMENT;
+        }
+        
+        CO_CANrx_t *buffer = &CANmodule->rxArray[index];
+        buffer->ident = ident;
+        buffer->mask = mask;
+        buffer->object = object;
+        buffer->CANrx_callback = CANrx_callback;
+        buffer->dave_lmo = NULL;  /* 不關聯硬體 LMO */
+        buffer->lmo_index = index;
+        
+        return CO_ERROR_NO;
+    }
+
     /* safety */
     if (CANmodule == NULL || index >= CANmodule->rxSize) {
         return CO_ERROR_ILLEGAL_ARGUMENT;
@@ -397,35 +600,65 @@ CO_ReturnError_t CO_CANrxBufferInit(
     /* get specific buffer */
     buffer = &CANmodule->rxArray[index];
 
-    /* **🎯 使用 DAVE 配置的接收 LMO** */
-    const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
+    /* **🎯 完全配置驅動：動態尋找並配置合適的 RX LMO** */
+    const CAN_NODE_LMO_t *matched_rx_lmo = NULL;
+    uint8_t matched_lmo_index = 0;
+    bool lmo_configured = false;
     
-    if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL) {
-        /* **✅ 根據 DAVE UI 推導的 Node ID 動態計算 CANopen ID** */
-        uint8_t node_id = canopen_get_node_id();
-        uint32_t sdo_rx_id = CANOPEN_SDO_RX_ID(node_id);
+    /* **✅ 第一階段：尋找完全匹配 ID 的 RX LMO** */
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
         
-        if (ident == sdo_rx_id) {
-            /* **🔧 優先使用 DAVE API** */
-            CAN_NODE_MO_UpdateID(rx_lmo, ident & 0x7FF);
+        if (lmo != NULL && lmo->mo_ptr != NULL &&
+            lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
             
-            /* **⚠️ 遮罩設定：DAVE 未提供 API，必須直接存取** */
-            rx_lmo->mo_ptr->can_id_mask = mask & 0x7FF;
+            uint32_t lmo_id = lmo->mo_ptr->can_identifier & 0x7FF;
             
-            Debug_Printf("✅ RX LMO 配置: ID=0x%03X, Mask=0x%03X (Node ID %d 從 DAVE UI 推導)\r\n", 
-                        ident, mask, node_id);
-            
-            /* Store CAN_NODE reference */
-            buffer->dave_lmo = (void*)rx_lmo;
-        } else {
-            Debug_Printf("🔍 軟體接收緩衝區: ID=0x%03X (非 SDO RX)\r\n", ident);
-            buffer->dave_lmo = NULL;
+            /* **🔍 檢查 ID 是否完全匹配** */
+            if (lmo_id == (ident & 0x7FF)) {
+                matched_rx_lmo = lmo;
+                matched_lmo_index = lmo_idx;
+                lmo_configured = true;
+                break;
+            }
         }
+    }
+    
+    /* **🔧 第二階段：如果沒有完全匹配，尋找第一個可用的 RX LMO 進行動態配置** */
+    if (!lmo_configured) {
         
-        Debug_Printf("RX Buffer[%d]: ID=0x%03X, Mask=0x%03X\r\n", index, ident, mask);
+        for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+            const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+            
+            if (lmo != NULL && lmo->mo_ptr != NULL &&
+                lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ &&
+                lmo->rx_event_enable) {
+                
+                /* **🎯 動態配置這個 RX LMO** */
+                XMC_CAN_MO_SetIdentifier(lmo->mo_ptr, ident & 0x7FF);
+                lmo->mo_ptr->can_id_mask = mask & 0x7FF;
+                
+                /* **重新初始化 LMO 使配置生效** */
+                CAN_NODE_MO_Init(lmo);
+                
+                matched_rx_lmo = lmo;
+                matched_lmo_index = lmo_idx;
+                lmo_configured = true;
+                
+                break;
+            }
+        }
+    }
+    
+    if (lmo_configured && matched_rx_lmo != NULL) {
+        /* **✅ 成功找到或配置了 RX LMO** */
+        
+        /* Store LMO reference */
+        buffer->dave_lmo = (void*)matched_rx_lmo;
+        buffer->lmo_index = matched_lmo_index;
     } else {
-        Debug_Printf("❌ 無法獲取 DAVE 配置的 RX LMO\r\n");
-        return CO_ERROR_ILLEGAL_ARGUMENT;
+        buffer->dave_lmo = NULL;
+        buffer->lmo_index = index;
     }
 
     /* Configure software buffer */
@@ -448,19 +681,71 @@ CO_CANtx_t *CO_CANtxBufferInit(
 {
     CO_CANtx_t *buffer = NULL;
 
+    /* **🚨 關鍵修正：防止 CANopen 堆疊用 ident=0 覆蓋已配置的 LMO** */
+    if (ident == 0) {
+        /* 只設定軟體緩衝區，不修改硬體 LMO */
+        if (CANmodule == NULL || index >= CANmodule->txSize) {
+            return NULL;
+        }
+        
+        buffer = &CANmodule->txArray[index];
+        buffer->ident = ident;
+        buffer->DLC = noOfBytes;
+        buffer->bufferFull = false;
+        buffer->syncFlag = syncFlag;
+        buffer->dave_lmo = NULL;  /* 不關聯硬體 LMO */
+        buffer->lmo_index = index;
+        
+        return buffer;
+    }
+
     /* safety */
     if (CANmodule == NULL || index >= CANmodule->txSize) {
-        /* **🔍 除錯輸出：檢查為什麼返回 NULL** */
-        if (CANmodule == NULL) {
-            Debug_Printf("❌ CO_CANtxBufferInit: CANmodule is NULL\r\n");
-        } else {
-            Debug_Printf("❌ CO_CANtxBufferInit: index=%d >= txSize=%d\r\n", index, CANmodule->txSize);
-        }
         return NULL;
     }
 
     /* get specific buffer */
     buffer = &CANmodule->txArray[index];
+
+    /* **🎯 動態 TX LMO 配置：為每個 TX Buffer 預分配 TX LMO** */
+    const CAN_NODE_LMO_t *tx_lmo = NULL;
+    uint8_t tx_lmo_index = 0;
+    bool lmo_assigned = false;
+    
+    /* **✅ 根據 index 動態分配可用的 TX LMO** */
+    uint8_t tx_lmo_count = 0;
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+        
+        if (lmo != NULL && lmo->mo_ptr != NULL &&
+            lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+            
+            /* **🔧 為這個 TX Buffer 分配對應的 TX LMO** */
+            if (tx_lmo_count == index) {
+                tx_lmo = lmo;
+                tx_lmo_index = lmo_idx;
+                lmo_assigned = true;
+                
+                break;
+            }
+            tx_lmo_count++;
+        }
+    }
+    
+    if (lmo_assigned && tx_lmo != NULL) {
+        /* **🎯 預配置 TX LMO 的基本設定** */
+        XMC_CAN_MO_SetIdentifier(tx_lmo->mo_ptr, ident & 0x7FF);
+        tx_lmo->mo_ptr->can_data_length = noOfBytes;
+        
+        /* **儲存 LMO 參考給緩衝區** */
+        buffer->dave_lmo = (void*)tx_lmo;
+        buffer->lmo_index = tx_lmo_index;
+        
+    } else {
+        /* **⚠️ 沒有足夠的 TX LMO，使用軟體緩衝區** */
+        buffer->dave_lmo = NULL;
+        buffer->lmo_index = index;
+    }
 
     /* CAN identifier and rtr */
     buffer->ident = ident;
@@ -476,30 +761,30 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 {
     CO_ReturnError_t err = CO_ERROR_NO;
     
-    /* **� 強制輸出 - 確保函數被調用時我們能看到** */
-    Debug_Printf_Raw("🚨 CO_CANsend() CALLED - ID=0x%03X, DLC=%d\r\n", buffer->ident, buffer->DLC);
+    /* 強制輸出 - 確保函數被調用時我們能看到 */
+    Debug_Printf_Raw("CO_CANsend() CALLED - ID=0x%03X, DLC=%d\r\n", buffer->ident, buffer->DLC);
     
-    /* **�🔍 Step 1: 詳細檢測傳入參數是否符合 DAVE 配置** */
+    /* Step 1: 詳細檢測傳入參數是否符合 DAVE 配置 */
     Debug_Printf_Verbose("=== CO_CANsend 數值檢測 ===\r\n");
-    Debug_Printf_Verbose("🔍 檢測 CAN ID: 0x%03X\r\n", buffer->ident);
-    Debug_Printf_Verbose("🔍 檢測 DLC: %d\r\n", buffer->DLC);
+    Debug_Printf_Verbose("檢測 CAN ID: 0x%03X\r\n", buffer->ident);
+    Debug_Printf_Verbose("檢測 DLC: %d\r\n", buffer->DLC);
     
-    /* **🔍 Step 0.5: 檢查 CAN 位元時序參數和暫存器狀態** */
+    /* Step 0.5: 檢查 CAN 位元時序參數和暫存器狀態 */
     Debug_Printf_Verbose("=== CAN 位元時序和暫存器檢查 ===\r\n");
     
-    /* **🚨 分析 DAVE 配置問題** */
-    Debug_Printf("🔍 DAVE 配置問題分析:\r\n");
+    /* 分析 DAVE 配置問題 */
+    Debug_Printf("DAVE 配置問題分析:\r\n");
     Debug_Printf("   當前設定: Synchronization jump width = 1\r\n");
     Debug_Printf("   當前設定: Sample point = 80%%\r\n");
     Debug_Printf("\r\n");
-    Debug_Printf("⚠️ WARNING: 這些設定可能導致 stuff error!\r\n");
+    Debug_Printf("WARNING: 這些設定可能導致 stuff error!\r\n");
     Debug_Printf("\r\n");
-    Debug_Printf("💡 建議的正確設定 (DAVE 中修改):\r\n");
-    Debug_Printf("   ✅ Synchronization jump width: 改為 2 (提高抗干擾)\r\n");
-    Debug_Printf("   ✅ Sample point: 改為 75%% (避免 stuff error)\r\n");
-    Debug_Printf("   ✅ 詳細建議: TSEG1=6, TSEG2=2, SJW=2\r\n");
+    Debug_Printf("建議的正確設定 (DAVE 中修改):\r\n");
+    Debug_Printf("   Synchronization jump width: 改為 2 (提高抗干擾)\r\n");
+    Debug_Printf("   Sample point: 改為 75%% (避免 stuff error)\r\n");
+    Debug_Printf("   詳細建議: TSEG1=6, TSEG2=2, SJW=2\r\n");
     Debug_Printf("\r\n");
-    Debug_Printf("� 修改步驟:\r\n");
+    Debug_Printf("修改步驟:\r\n");
     Debug_Printf("   1. 開啟 DAVE IDE\r\n");
     Debug_Printf("   2. 點選 CAN_NODE_0\r\n");
     Debug_Printf("   3. Advanced Settings 頁籤\r\n");
@@ -507,20 +792,20 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     Debug_Printf("   5. 重新產生程式碼並編譯\r\n");
     Debug_Printf("\r\n");
     
-    /* **檢測 1: CAN ID 範圍驗證** */
+    /* 檢測 1: CAN ID 範圍驗證 */
     if (buffer->ident > 0x7FF) {
-        Debug_Printf("❌ ERROR: CAN ID 0x%03X 超出 11-bit 範圍 (最大 0x7FF)\r\n", buffer->ident);
+        Debug_Printf("ERROR: CAN ID 0x%03X 超出 11-bit 範圍 (最大 0x7FF)\r\n", buffer->ident);
         return CO_ERROR_ILLEGAL_ARGUMENT;
     }
     
-    /* **檢測 2: DLC 範圍驗證** */
+    /* 檢測 2: DLC 範圍驗證 */
     if (buffer->DLC > 8) {
-        Debug_Printf("❌ ERROR: DLC %d 超出範圍 (最大 8)\r\n", buffer->DLC);
+        Debug_Printf("ERROR: DLC %d 超出範圍 (最大 8)\r\n", buffer->DLC);
         return CO_ERROR_ILLEGAL_ARGUMENT;
     }
     
-    /* **檢測 3: 與 DAVE 配置的 LMO 對照** */
-    Debug_Printf("🔍 檢查 DAVE 配置的 LMO 對應關係:\r\n");
+    /* 檢測 3: 與 DAVE 配置的 LMO 對照 */
+    Debug_Printf("檢查 DAVE 配置的 LMO 對應關係:\r\n");
     Debug_Printf("   LMO_01 (0x8A)  -> Emergency + SDO TX\r\n");
     Debug_Printf("   LMO_02 (0x18A) -> TPDO1\r\n"); 
     Debug_Printf("   LMO_03 (0x28A) -> TPDO2\r\n");
@@ -530,7 +815,7 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     Debug_Printf("   LMO_07 (0x70A) -> Heartbeat\r\n");
     Debug_Printf("   LMO_08 (0x60A) -> SDO RX (接收)\r\n");
     
-    /* **檢測 4: 確認 ID 是否匹配 DAVE 預設值** */
+    /* 檢測 4: 確認 ID 是否匹配 DAVE 預設值 */
     bool id_matches_dave_config = false;
     const char* lmo_description = "未知";
     
@@ -544,12 +829,12 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
         case 0x70A: id_matches_dave_config = true; lmo_description = "Heartbeat (LMO_07)"; break;
         case 0x123: id_matches_dave_config = true; lmo_description = "測試訊息"; break;
         default:
-            Debug_Printf("⚠️ WARN: ID 0x%03X 不在 DAVE 預設配置中\r\n", buffer->ident);
+            Debug_Printf("WARN: ID 0x%03X 不在 DAVE 預設配置中\r\n", buffer->ident);
             break;
     }
     
     if (id_matches_dave_config) {
-        Debug_Printf("✅ PASS: ID 0x%03X 匹配 DAVE 配置 - %s\r\n", buffer->ident, lmo_description);
+        Debug_Printf("PASS: ID 0x%03X 匹配 DAVE 配置 - %s\r\n", buffer->ident, lmo_description);
     }
 
     /* Verify overflow */
@@ -561,8 +846,61 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
         err = CO_ERROR_TX_OVERFLOW;
     }
 
-    /* **🎯 使用 DAVE 配置驅動的 LMO 選擇** */
-    const CAN_NODE_LMO_t *tx_lmo = canopen_get_lmo_for_tx(buffer->ident);
+    /* **🎯 優先使用緩衝區已預分配的 TX LMO** */
+    const CAN_NODE_LMO_t *tx_lmo = NULL;
+    uint8_t tx_lmo_index = 0;
+    
+    Debug_Printf("🔍 為 ID=0x%03X 尋找 TX LMO (優先使用預分配)\r\n", buffer->ident);
+    
+    /* **✅ 第一優先：使用緩衝區預分配的 TX LMO** */
+    if (buffer->dave_lmo != NULL) {
+        tx_lmo = (const CAN_NODE_LMO_t*)buffer->dave_lmo;
+        tx_lmo_index = buffer->lmo_index;
+        
+        /* **確認這個 LMO 確實是 TX 類型且可用** */
+        if (tx_lmo->mo_ptr != NULL && 
+            tx_lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+            
+            uint32_t mo_status = CAN_NODE_MO_GetStatus(tx_lmo);
+            if (!(mo_status & XMC_CAN_MO_STATUS_TX_PENDING)) {
+                Debug_Printf("✅ 使用預分配的 TX LMO_%02d (索引=%d)\r\n", 
+                           tx_lmo_index + 1, tx_lmo_index);
+            } else {
+                Debug_Printf("⚠️ 預分配的 LMO_%02d 忙碌，尋找替代方案\r\n", tx_lmo_index + 1);
+                tx_lmo = NULL;  /* 標記為無效，需要重新尋找 */
+            }
+        } else {
+            Debug_Printf("❌ 預分配的 LMO 無效或非 TX 類型\r\n");
+            tx_lmo = NULL;
+        }
+    }
+    
+    /* **🔧 第二優先：動態尋找任何可用的 TX LMO** */
+    if (tx_lmo == NULL) {
+        Debug_Printf("🔧 動態尋找可用的 TX LMO...\r\n");
+        
+        for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+            const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
+            
+            if (lmo != NULL && lmo->mo_ptr != NULL &&
+                lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+                
+                /* **🔍 檢查 LMO 是否可用 (不忙碌)** */
+                uint32_t mo_status = CAN_NODE_MO_GetStatus(lmo);
+                
+                if (!(mo_status & XMC_CAN_MO_STATUS_TX_PENDING)) {
+                    /* **✅ 找到可用的 TX LMO** */
+                    tx_lmo = lmo;
+                    tx_lmo_index = lmo_idx;
+                    Debug_Printf("✅ 動態選擇 TX LMO_%02d (索引=%d) for ID=0x%03X\r\n", 
+                               lmo_idx + 1, lmo_idx, buffer->ident);
+                    break;
+                } else {
+                    Debug_Printf("⚠️ LMO_%02d 忙碌中 (狀態=0x%08lX)，檢查下一個\r\n", lmo_idx + 1, mo_status);
+                }
+            }
+        }
+    }
     
     /* **檢測 5: LMO 有效性驗證** */
     if (tx_lmo == NULL) {
@@ -575,8 +913,8 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
         return CO_ERROR_ILLEGAL_ARGUMENT;
     }
     
-    Debug_Printf("✅ PASS: 找到有效的 TX LMO (MO%d) for ID=0x%03X\r\n", 
-                tx_lmo->number, buffer->ident);
+    Debug_Printf("✅ PASS: 找到有效的 TX LMO_%02d (MO%d, 索引=%d) for ID=0x%03X\r\n", 
+                tx_lmo_index + 1, tx_lmo->number, tx_lmo_index, buffer->ident);
     
     /* **檢測 6: 當前 LMO 狀態檢測** */
     uint32_t mo_status = XMC_CAN_MO_GetStatus(tx_lmo->mo_ptr);
@@ -710,21 +1048,6 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
     }
 }
 
-/******************************************************************************/
-/* Get error counters from the module. If necessary, function may use
- * different way to determine errors. */
-static uint16_t CO_CANerrors(CO_CANmodule_t *CANmodule)
-{
-    uint16_t err = 0;
-    
-    /* **使用 CAN_NODE 檢查錯誤狀態** */
-    if (CAN_NODE_0.global_ptr != NULL) {
-        /* 可以添加錯誤計數器檢查 */
-        /* 目前返回 0 表示無錯誤 */
-    }
-    
-    return err;
-}
 
 /******************************************************************************/
 /**
@@ -735,33 +1058,47 @@ void CO_CANmodule_process(CO_CANmodule_t *CANmodule)
 {
     if (CANmodule == NULL) return;
 
-    /* **主要機制：Service Request 0 中斷**
-     * 正常情況下，CAN0_0_IRQHandler 會處理所有事件
-     * 這裡的輪詢作為安全網，防止中斷遺漏
+    /* **🎯 關鍵修正：主動輪詢 RX 狀態** 
+     * 問題：依賴中斷可能會遺漏接收事件
+     * 解決：每次調用都檢查 RX 狀態
      */
     static uint32_t poll_counter = 0;
-    static uint32_t backup_checks = 0;
+    static uint32_t rx_checks = 0;
+    static uint32_t rx_found = 0;
     poll_counter++;
     
-    /* 每 50 次調用進行一次備用檢查（降低輪詢頻率）*/
-    if ((poll_counter % 50) == 0) {
-        /* **🎯 使用 DAVE 配置的接收 LMO 進行輪詢檢查** */
-        const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
+    /* **🔧 動態檢查所有 LMO 的 RX 狀態（不依賴中斷）** */
+    for (uint8_t lmo_idx = 0; lmo_idx < CAN_NODE_0.mo_count; lmo_idx++) {
+        const CAN_NODE_LMO_t *lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
         
-        if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL) {
-            /* 使用 XMC 直接 API 檢查狀態 (DAVE 未提供狀態檢查 API) */
-            uint32_t status = XMC_CAN_MO_GetStatus(rx_lmo->mo_ptr);
-            if (status & XMC_CAN_MO_STATUS_RX_PENDING) {
-                backup_checks++;
-                Debug_Printf("🔍 備用輪詢檢測到 RX 數據 (#%lu)，調用中斷處理\r\n", backup_checks);
-                CO_CANinterrupt_Rx(CANmodule, CANOPEN_LMO_SDO_RX);
+        /* **🔍 只處理 RX 類型的 LMO** */
+        if (lmo != NULL && lmo->mo_ptr != NULL &&
+            lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
+            
+            rx_checks++;
+            
+            /* **🎯 關鍵：檢查 NEWDAT 位而不是 RX_PENDING** */
+            uint32_t status = XMC_CAN_MO_GetStatus(lmo->mo_ptr);
+        
+            /* 檢查是否有新的接收數據 */
+            if (status & XMC_CAN_MO_STATUS_NEW_DATA) {
+                rx_found++;
+                
+                /* 調用接收處理函數 */
+                CO_CANinterrupt_Rx(CANmodule, lmo_idx);
+                
+                /* 簡化的除錯輸出（避免輸出過多） */
+                if ((rx_found % 10) == 1) {  /* 每 10 次輸出一次 */
+                    Debug_Printf("✅ RX 輪詢發現數據 #%lu (檢查 %lu 次) LMO_%02d\r\n", 
+                               rx_found, rx_checks, lmo_idx + 1);
+                }
             }
         }
     }
 
     /* 定期報告系統狀態 */
     if ((poll_counter % 5000) == 0) {
-        Debug_Printf("📊 CAN 系統狀態: 主中斷運行，備用檢查 %lu 次\r\n", backup_checks);
+        Debug_Printf("📊 RX 輪詢統計: 檢查 %lu 次，發現 %lu 次\r\n", rx_checks, rx_found);
     }
 
     /* 簡化錯誤處理 - 避免複雜的 Emergency 依賴 */
@@ -773,64 +1110,117 @@ void CO_CANmodule_process(CO_CANmodule_t *CANmodule)
 /* CAN RX interrupt */
 static void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule, uint32_t index)
 {
-    /* 🎯 中斷中只做必要處理，詳細除錯延後輸出 */
-    Debug_Printf_ISR("RX Process Start");
+    /* **🎯 根據 index 動態獲取對應的 RX LMO** */
+    if (index >= CAN_NODE_0.mo_count) {
+        Debug_Printf("❌ RX index %d 超出範圍 (最大 %d)\r\n", index, CAN_NODE_0.mo_count - 1);
+        return;
+    }
     
-    /* **🎯 使用 DAVE 配置的接收 LMO** */
-    const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
+    CAN_NODE_LMO_t *rx_lmo = (CAN_NODE_LMO_t*)CAN_NODE_0.lmobj_ptr[index];
     
-    if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL) {
+    /* **🔍 確保這個 LMO 確實是 RX 類型** */
+    if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL &&
+        rx_lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
         
-        /* **✅ 手動清除狀態位，確保 DAVE API 內部循環能退出** */
-        XMC_CAN_MO_ResetStatus(rx_lmo->mo_ptr, XMC_CAN_MO_RESET_STATUS_RX_PENDING | XMC_CAN_MO_RESET_STATUS_NEW_DATA);
-
-        /* **🔧 使用 DAVE API 接收數據** */
-        CAN_NODE_STATUS_t rx_status = CAN_NODE_MO_ReceiveData((CAN_NODE_LMO_t*)rx_lmo);
-
-        if (rx_status == CAN_NODE_STATUS_SUCCESS) {
-            /* 讀取接收的 CAN 訊息 - 從 MO 結構讀取 */
-            CO_CANrxMsg_t rcvMsg;
-            rcvMsg.ident = rx_lmo->mo_ptr->can_identifier & 0x07FFU;
-            rcvMsg.DLC = rx_lmo->mo_ptr->can_data_length;
+        /* **🔧 關鍵修正：使用正確的 DAVE API 檢查和接收資料** */
+        uint32_t mo_status = CAN_NODE_MO_GetStatus(rx_lmo);
+        
+        /* 檢查是否有待處理的接收訊息 */
+        if (mo_status & XMC_CAN_MO_STATUS_RX_PENDING) {
             
-            /* 複製數據 */
-            for (int i = 0; i < rcvMsg.DLC && i < 8; i++) {
-                rcvMsg.data[i] = rx_lmo->mo_ptr->can_data[i];
-            }
-        
-            /* 快速驗證 */
-            if (rcvMsg.ident > 0x000 && rcvMsg.ident <= 0x7FF && rcvMsg.DLC <= 8) {
-                Debug_Printf_ISR("RX: ID=0x%03X DLC=%d", rcvMsg.ident, rcvMsg.DLC);
+            /* 清除接收 pending 狀態 */
+            XMC_CAN_MO_ResetStatus(rx_lmo->mo_ptr, XMC_CAN_MO_RESET_STATUS_RX_PENDING);
+            
+            /* 使用正確的 DAVE API 接收資料 */
+            CAN_NODE_STATUS_t rx_status = CAN_NODE_MO_Receive(rx_lmo);
+
+            if (rx_status == CAN_NODE_STATUS_SUCCESS) {
+                /* **📨 從 DAVE 接收結構中讀取 CAN 訊息** */
+                CO_CANrxMsg_t rcvMsg;
                 
-                /* **尋找匹配的接收緩衝區** */
-                bool message_processed = false;
-                for (uint16_t i = 0; i < CANmodule->rxSize; i++) {
-                    CO_CANrx_t *buffer = &CANmodule->rxArray[i];
-                    if (buffer != NULL && buffer->CANrx_callback != NULL) {
-                        /* 檢查 ID 和遮罩是否匹配 */
-                        if (((rcvMsg.ident ^ buffer->ident) & buffer->mask) == 0U) {
-                            /* 調用 CANopen 處理函數 */
-                            buffer->CANrx_callback(buffer->object, (void*)&rcvMsg);
-                            message_processed = true;
-                            Debug_Printf_ISR("RX Callback Done");
-                            break;
+                /* **✅ 使用 DAVE 接收到的資料構建 CANopen 訊息** */
+                rcvMsg.ident = rx_lmo->mo_ptr->can_identifier & 0x07FFU;
+                rcvMsg.DLC = rx_lmo->mo_ptr->can_data_length & 0x0FU;  /* 確保 DLC 在有效範圍 */
+                
+                /* **🎯 特別處理 ID=0x000 (NMT) 的除錯輸出** */
+                if (rcvMsg.ident == 0x000) {
+                    Debug_Printf("🎯 NMT 訊息接收: ID=0x000, DLC=%d\r\n", rcvMsg.DLC);
+                }
+                
+                /* 複製數據 - 使用 DAVE 的資料格式 */
+                uint64_t received_data = ((uint64_t)rx_lmo->mo_ptr->can_data[1] << 32) | rx_lmo->mo_ptr->can_data[0];
+                for (int i = 0; i < rcvMsg.DLC && i < 8; i++) {
+                    rcvMsg.data[i] = (uint8_t)((received_data >> (i * 8)) & 0xFF);
+                }
+            
+                /* **🎯 資料有效性檢查 - 修正：允許 ID=0x000 (NMT 命令)** */
+                if (rcvMsg.ident >= 0x000 && rcvMsg.ident <= 0x7FF && rcvMsg.DLC <= 8) {
+                    
+                    /* **🔍 尋找匹配的接收緩衝區** */
+                    bool message_processed = false;
+                    for (uint16_t i = 0; i < CANmodule->rxSize; i++) {
+                        CO_CANrx_t *buffer = &CANmodule->rxArray[i];
+                        if (buffer != NULL && buffer->CANrx_callback != NULL) {
+                            /* 檢查 ID 和遮罩是否匹配 */
+                            if (((rcvMsg.ident ^ buffer->ident) & buffer->mask) == 0U) {
+                                /* **✅ 調用 CANopen 處理函數** */
+                                buffer->CANrx_callback(buffer->object, (void*)&rcvMsg);
+                                message_processed = true;
+                                
+                                /* 簡化的除錯輸出 */
+                                static uint32_t rx_msg_count = 0;
+                                rx_msg_count++;
+                                if ((rx_msg_count % 5) == 1) {  /* 每 5 次輸出一次 */
+                                    Debug_Printf("📨 RX: ID=0x%03X DLC=%d LMO_%02d (#%lu)\r\n", 
+                                               rcvMsg.ident, rcvMsg.DLC, index + 1, rx_msg_count);
+                                }
+                                break;
+                            }
                         }
                     }
-                }
-                
-                if (!message_processed) {
-                    Debug_Printf_ISR("RX No Match");
+                    
+                    if (!message_processed) {
+                        static uint32_t unmatched_count = 0;
+                        unmatched_count++;
+                        
+                        /* **🎯 特別關注 NMT 訊息的處理失敗** */
+                        if (rcvMsg.ident == 0x000) {
+                            Debug_Printf("🚨 NMT 訊息無匹配接收緩衝區! ID=0x000 DLC=%d\r\n", rcvMsg.DLC);
+                            /* 顯示所有接收緩衝區的設定供診斷 */
+                            for (uint16_t j = 0; j < CANmodule->rxSize && j < 5; j++) {
+                                CO_CANrx_t *buf = &CANmodule->rxArray[j];
+                                if (buf->CANrx_callback != NULL) {
+                                    Debug_Printf("  RxBuf[%d]: ID=0x%03X Mask=0x%03X\r\n", 
+                                               j, buf->ident, buf->mask);
+                                }
+                            }
+                        } else if ((unmatched_count % 10) == 1) {  /* 其他訊息每 10 次輸出一次 */
+                            Debug_Printf("🚫 RX 無匹配: ID=0x%03X LMO_%02d (#%lu)\r\n", 
+                                       rcvMsg.ident, index + 1, unmatched_count);
+                        }
+                    }
+                } else {
+                    static uint32_t invalid_count = 0;
+                    invalid_count++;
+                    if ((invalid_count % 10) == 1) {  /* 每 10 次輸出一次 */
+                        Debug_Printf("❌ RX 無效資料: ID=0x%03X DLC=%d LMO_%02d (#%lu)\r\n", 
+                                   rcvMsg.ident, rcvMsg.DLC, index + 1, invalid_count);
+                    }
                 }
             } else {
-                Debug_Printf_ISR("RX Invalid Data");
+                static uint32_t rx_error_count = 0;
+                rx_error_count++;
+                if ((rx_error_count % 20) == 1) {  /* 每 20 次輸出一次 */
+                    Debug_Printf("❌ DAVE Receive 失敗: %d LMO_%02d (#%lu)\r\n", 
+                               rx_status, index + 1, rx_error_count);
+                }
             }
-        
-        Debug_Printf_ISR("RX Complete");
         } else {
-            Debug_Printf_ISR("RX Status Failed");
+            /* 沒有 RX pending，正常情況 */
         }
     } else {
-        Debug_Printf_ISR("RX LMO_04 NULL");
+        /* 這個 LMO 不是 RX 類型，忽略 */
+        Debug_Printf("⚠️ LMO_%02d 不是 RX 類型，忽略中斷\r\n", index + 1);
     }
 }
 
@@ -839,23 +1229,41 @@ static void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule, uint32_t index)
 static void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule, uint32_t index)
 {
     /* **🎯 TX 中斷處理 - 基於 DAVE 配置動態檢查** */
-    canopen_dave_config_t config = canopen_get_dave_config();
-    uint8_t tx_lmo_count = config.lmo_count > 1 ? config.lmo_count - 1 : config.lmo_count;
+    if (index >= CAN_NODE_0.mo_count) {
+        Debug_Printf("❌ TX index %d 超出範圍 (最大 %d)\r\n", index, CAN_NODE_0.mo_count - 1);
+        return;
+    }
     
-    if (CANmodule != NULL && index < tx_lmo_count) {  /* **✅ 使用 DAVE UI 配置的 TX LMO 數量** */
-        /* 檢查對應的發送緩衝區 */
-        if (index < CANmodule->txSize) {
+    const CAN_NODE_LMO_t *tx_lmo = CAN_NODE_0.lmobj_ptr[index];
+    
+    /* **🔍 確保這個 LMO 確實是 TX 類型** */
+    if (tx_lmo != NULL && tx_lmo->mo_ptr != NULL &&
+        tx_lmo->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_TRANSMSGOBJ) {
+        
+        if (CANmodule != NULL && index < CANmodule->txSize) {
+            /* 檢查對應的發送緩衝區 */
             CO_CANtx_t *buffer = &CANmodule->txArray[index];
             
             if (buffer->bufferFull) {
                 /* 發送完成，清除 bufferFull 標誌 */
                 buffer->bufferFull = false;
                 CANmodule->CANtxCount--;
+                
+                /* 簡化的除錯輸出 */
+                static uint32_t tx_complete_count = 0;
+                tx_complete_count++;
+                if ((tx_complete_count % 10) == 1) {  /* 每 10 次輸出一次 */
+                    Debug_Printf("📤 TX Complete: LMO_%02d (#%lu)\r\n", 
+                               index + 1, tx_complete_count);
+                }
             }
         }
         
         /* 標記第一次發送完成 */
         CANmodule->firstCANtxMessage = false;
+    } else {
+        /* 這個 LMO 不是 TX 類型，忽略 */
+        Debug_Printf("⚠️ LMO_%02d 不是 TX 類型，忽略中斷\r\n", index + 1);
     }
 }
 
@@ -873,69 +1281,18 @@ void CO_CANsetConfigurationMode(void *CANptr)
 /******************************************************************************/
 void CO_CANsetNormalMode(CO_CANmodule_t *CANmodule)
 {
-    /* 使用 CAN_NODE - 正常模式啟動 */
+    /* 使用 DAVE CAN_NODE - 只設定正常模式標誌 */
     if (CANmodule != NULL) {
         CANmodule->CANnormal = true;
-        Debug_Printf("=== CAN_NODE 模式激活 ===\r\n");
+        Debug_Printf("✅ CAN 正常模式已啟用 (DAVE 配置保持不變)\r\n");
         
-        /* **🎯 關鍵修正：使用 CAN_NODE API 配置 Transfer Settings** */
-        Debug_Printf("=== 配置 CAN Transfer Settings ===\r\n");
+        /* **🎯 DAVE 配置的所有硬體設定都保持原樣** */
+        /* - LMO 類型 (RX/TX) 由 DAVE UI 設定 */
+        /* - CAN ID 由 DAVE UI 設定 */
+        /* - 事件啟用由 DAVE UI 設定 */
+        /* - 中斷路由由 DAVE UI 設定 */
         
-        /* **配置所有 TX LMO 的 Transfer Settings** */
-        canopen_dave_config_t config = canopen_get_dave_config();
-        uint8_t tx_lmo_count = config.lmo_count > 1 ? config.lmo_count - 1 : config.lmo_count;
-        
-        for (int lmo_idx = 0; lmo_idx < tx_lmo_count; lmo_idx++) {
-            const CAN_NODE_LMO_t *tx_lmo = CAN_NODE_0.lmobj_ptr[lmo_idx];
-            if (tx_lmo != NULL && tx_lmo->mo_ptr != NULL) {
-                /* **🔧 徹底修正 CAN 物理層問題** */
-                
-                /* **1. 啟用 Single Transmit Trial (STT) - 防止自動重傳** */
-                XMC_CAN_MO_EnableSingleTransmitTrial(tx_lmo->mo_ptr);
-                
-                /* **2. 清除所有錯誤標誌** */
-                XMC_CAN_MO_ResetStatus(tx_lmo->mo_ptr, 
-                    XMC_CAN_MO_RESET_STATUS_TX_PENDING |
-                    XMC_CAN_MO_RESET_STATUS_RX_PENDING |
-                    XMC_CAN_MO_RESET_STATUS_RX_UPDATING |
-                    XMC_CAN_MO_RESET_STATUS_NEW_DATA);
-                
-                /* **3. 設定訊息物件為標準格式（非擴展格式）** */
-                tx_lmo->mo_ptr->can_mo_type = XMC_CAN_MO_TYPE_TRANSMSGOBJ;
-                
-                /* **4. 確保使用標準 11-bit ID 格式** */
-                tx_lmo->mo_ptr->can_id_mode = XMC_CAN_FRAME_TYPE_STANDARD_11BITS;
-                
-                /* **5. 設定為數據幀（非遠程幀）** */
-                tx_lmo->mo_ptr->can_data_length &= 0x0F; // 保留低 4 位 DLC，清除高位
-                
-                Debug_Printf("✅ LMO_%02d: 完整 CAN 物理層修正\r\n", lmo_idx + 1);
-            }
-        }
-        
-        /* **🚨 關鍵：CAN 節點層級的錯誤處理設定** */
-        if (CAN_NODE_0.global_ptr != NULL) {
-            /* **簡化實現 - 避免使用不存在的 API** */
-            Debug_Printf("✅ CAN 節點錯誤處理已優化 (簡化版)\r\n");
-        }
-        
-        /* **配置 RX LMO 的 Transfer Settings** */
-        const CAN_NODE_LMO_t *rx_lmo = canopen_get_lmo_for_rx();
-        if (rx_lmo != NULL && rx_lmo->mo_ptr != NULL) {
-            /* **✅ 啟用 Single Data Transfer (SDT) for RX** */
-            XMC_CAN_FIFO_EnableSingleDataTransfer(rx_lmo->mo_ptr);
-            Debug_Printf("✅ RX LMO: 啟用 Single Data Transfer (SDT)\r\n");
-            
-            Debug_Printf("RX LMO 接收事件: %s\r\n", rx_lmo->rx_event_enable ? "已啟用" : "未啟用");
-        } else {
-            Debug_Printf("❌ 無法獲取 RX LMO 配置\r\n");
-        }
-        
-        Debug_Printf("✅ CAN Transfer Settings 配置完成\r\n");
-        Debug_Printf("  - Single Transmit Trial (STT): 已啟用（防止重傳）\r\n");
-        Debug_Printf("  - Single Data Transfer (SDT): 已啟用（RX）\r\n");
-        Debug_Printf("  - Ignore Remote Request: 已配置\r\n");
-        Debug_Printf("✅ CAN 節點設定為正常模式（透過 DAVE 管理）\r\n");
+        Debug_Printf("✅ DAVE CAN_NODE 硬體配置完全保持原樣\r\n");
     }
 }
 
@@ -1134,259 +1491,85 @@ static void Debug_Printf(const char* format, ...)
 }
 
 /******************************************************************************/
-/* 簡化版除錯函數 - 只處理固定字串，避免格式化問題 */
-static void Debug_Printf_Simple(const char* str)
-{
-    if (str == NULL) return;
-    
-    size_t len = strlen(str);
-    if (len > 0 && len < 200) {
-        UART_STATUS_t uart_status = UART_Transmit(&UART_0, (uint8_t*)str, len);
-        if (uart_status == UART_STATUS_SUCCESS) {
-            /* 等待傳輸完成 */
-            uint32_t timeout = 0;
-            while (UART_0.runtime->tx_busy == true && timeout < 100000) {
-                timeout++;
-                /* 更長的延遲 */
-                for (volatile int i = 0; i < 50; i++);
-            }
-            
-            /* 額外延遲確保完成 */
-            for (volatile int i = 0; i < 5000; i++);
-        }
-    }
-}
-
-/******************************************************************************/
 /* **📋 DAVE 配置管理函數 - 遵循 DAVE APP 配置驅動原則** */
 /******************************************************************************/
 
 /**
- * @brief 從 DAVE UI 配置推導 CANopen 配置
- * @return canopen_dave_config_t 配置結構
+ * @brief 獲取 CANopen Node ID - 動態版本（專業產品設計）
  * 
- * **🎯 配置驅動原則：所有參數從 DAVE 生成的配置結構讀取**
- */
-static canopen_dave_config_t canopen_get_dave_config(void)
-{
-    canopen_dave_config_t config = {0};
-    
-    /* 初始化配置 */
-    if (!g_dave_config_initialized) {
-        /* **✅ 首先從 DAVE UI 配置讀取 LMO 數量** */
-        config.lmo_count = CAN_NODE_0.mo_count;
-        
-        /* **🔧 動態尋找接收類型的 LMO 來推導 Node ID** */
-        bool node_id_found = false;
-        for (uint8_t i = 0; i < config.lmo_count; i++) {
-            if (CAN_NODE_0.lmobj_ptr[i] != NULL && 
-                CAN_NODE_0.lmobj_ptr[i]->mo_ptr != NULL &&
-                CAN_NODE_0.lmobj_ptr[i]->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
-                /* 動態計算：SDO RX ID (0x600 + Node ID) -> Node ID */
-                uint32_t rx_id = CAN_NODE_0.lmobj_ptr[i]->mo_ptr->can_identifier;
-                if (rx_id >= 0x600 && rx_id <= 0x67F) {  /* 有效的 SDO RX ID 範圍 */
-                    config.node_id = (uint8_t)(rx_id - 0x600U);
-                    node_id_found = true;
-                    break;
-                }
-            }
-        }
-        
-        /* **✅ 如果找不到接收 LMO，使用最後一個 LMO 作為後備方案** */
-        if (!node_id_found && config.lmo_count > 0) {
-            uint8_t last_idx = config.lmo_count - 1;
-            if (CAN_NODE_0.lmobj_ptr[last_idx] != NULL && 
-                CAN_NODE_0.lmobj_ptr[last_idx]->mo_ptr != NULL) {
-                uint32_t rx_id = CAN_NODE_0.lmobj_ptr[last_idx]->mo_ptr->can_identifier;
-                if (rx_id >= 0x600 && rx_id <= 0x67F) {
-                    config.node_id = (uint8_t)(rx_id - 0x600U);
-                    node_id_found = true;
-                }
-            }
-        }
-        
-        /* **✅ 從 DAVE UI 配置讀取波特率** */
-        if (CAN_NODE_0.baudrate_config != NULL) {
-            config.baudrate = CAN_NODE_0.baudrate_config->baudrate;
-        }
-        
-        /* **✅ 檢查是否所有 LMO 都使用 Service Request 0 (DAVE UI 配置)** */
-        config.service_request_0 = true;
-        for (uint8_t i = 0; i < config.lmo_count; i++) {
-            if (CAN_NODE_0.lmobj_ptr[i] != NULL) {
-                if (CAN_NODE_0.lmobj_ptr[i]->tx_sr != 0 || CAN_NODE_0.lmobj_ptr[i]->rx_sr != 0) {
-                    config.service_request_0 = false;
-                    break;
-                }
-            }
-        }
-        
-        /* **✅ 檢查事件配置 (DAVE UI 設定)** */
-        config.rx_event_enabled = false;
-        config.tx_event_enabled = false;
-        
-        for (uint8_t i = 0; i < config.lmo_count; i++) {
-            if (CAN_NODE_0.lmobj_ptr[i] != NULL) {
-                if (CAN_NODE_0.lmobj_ptr[i]->rx_event_enable) {
-                    config.rx_event_enabled = true;
-                }
-                if (CAN_NODE_0.lmobj_ptr[i]->tx_event_enable) {
-                    config.tx_event_enabled = true;
-                }
-            }
-        }
-        
-        g_dave_config = config;
-        g_dave_config_initialized = true;
-        
-        /* 輸出配置摘要 */
-        Debug_Printf("=== DAVE UI 配置分析 ===\r\n");
-        if (node_id_found) {
-            Debug_Printf("Node ID: %d (從接收 LMO 動態推導)\r\n", config.node_id);
-        } else {
-            Debug_Printf("Node ID: %d (預設值，未找到有效的接收 LMO)\r\n", config.node_id);
-        }
-        Debug_Printf("LMO 數量: %d (DAVE UI 配置)\r\n", config.lmo_count);
-        Debug_Printf("波特率: %lu bps (DAVE UI 配置)\r\n", config.baudrate);
-        Debug_Printf("Service Request 0: %s (DAVE UI 配置)\r\n", config.service_request_0 ? "是" : "否");
-        Debug_Printf("RX 事件: %s, TX 事件: %s (DAVE UI 配置)\r\n", 
-                    config.rx_event_enabled ? "啟用" : "停用",
-                    config.tx_event_enabled ? "啟用" : "停用");
-    }
-    
-    return g_dave_config;
-}
-
-/**
- * @brief 獲取 CANopen Node ID (從 DAVE UI 推導)
+ * 🎯 設計理念：
+ * 1. 目前從全域變數讀取，可在執行時修改
+ * 2. 未來可擴展為從 EEPROM 讀取，實現完整的產品化
+ * 3. 支援動態配置，不需要重新編譯韌體
  */
 static uint8_t canopen_get_node_id(void)
 {
-    canopen_dave_config_t config = canopen_get_dave_config();
-    return config.node_id;
+    /* **🔧 階段一：從全域變數讀取（目前實現）** */
+    /* 可在執行時透過除錯介面或命令修改 g_canopen_node_id */
+    
+    /* **🚀 階段二：未來可擴展為 EEPROM 實現** */
+    // if (eeprom_is_valid()) {
+    //     uint8_t eeprom_node_id = eeprom_read_node_id();
+    //     if (eeprom_node_id >= 1 && eeprom_node_id <= 127) {
+    //         g_canopen_node_id = eeprom_node_id;
+    //     }
+    // }
+    
+    /* **✅ 範圍檢查** */
+    if (g_canopen_node_id < 1 || g_canopen_node_id > 127) {
+        Debug_Printf("⚠️ Node ID %d 超出範圍，使用預設值 10\r\n", g_canopen_node_id);
+        g_canopen_node_id = 10;  /* 恢復為安全的預設值 */
+    }
+    
+    return g_canopen_node_id;
 }
 
 /**
- * @brief 根據 CAN ID 選擇合適的 LMO 索引 (基於 DAVE UI 配置)
- * 
- * **🎯 動態計算原則：根據 UI 配置的 Node ID 動態計算 CANopen ID**
+ * @brief 取得當前 CANopen Node ID
+ * @return 當前的 Node ID
  */
-static uint32_t canopen_get_lmo_index_for_id(uint32_t can_id)
+uint8_t canopen_get_current_node_id(void)
 {
-    uint8_t node_id = canopen_get_node_id();
-    canopen_dave_config_t config = canopen_get_dave_config();
-    
-    /* **✅ 基本測試 ID - 使用 DAVE UI 配置的 LMO_01 預設 ID** */
-    if (config.lmo_count > 0 && CAN_NODE_0.lmobj_ptr[0] != NULL && 
-        can_id == CAN_NODE_0.lmobj_ptr[0]->mo_ptr->can_identifier) {
-        return CANOPEN_LMO_TEST_TX;
-    }
-    
-    /* **🔧 動態計算：Emergency ID (0x080 + Node ID)** */
-    if (can_id == CANOPEN_EMERGENCY_ID(node_id)) {
-        return CANOPEN_LMO_EMERGENCY;
-    }
-    
-    /* **🔧 動態計算：SDO TX ID (0x580 + Node ID)** */
-    if (can_id == CANOPEN_SDO_TX_ID(node_id)) {
-        return CANOPEN_LMO_EMERGENCY;  /* 共用 LMO_02 */
-    }
-    
-    /* **🔧 動態計算：TPDO IDs (0x180 + Node ID)** */
-    if (can_id == CANOPEN_TPDO1_ID(node_id)) {
-        return CANOPEN_LMO_TPDO;
-    }
-    
-    /* **🔧 動態計算：Heartbeat ID (0x700 + Node ID)** */
-    if (can_id == CANOPEN_HEARTBEAT_ID(node_id)) {
-        return CANOPEN_LMO_TPDO;  /* 共用 LMO_03 */
-    }
-    
-    /* **✅ 預設使用第一個 TX LMO (基於 DAVE UI 配置)** */
-    return CANOPEN_LMO_TEST_TX;
-}
-
-/**
- * @brief 獲取用於發送的 LMO 配置
- * 
- * **✅ 讀取 UI 配置：從 DAVE 生成的配置結構讀取**
- */
-static const CAN_NODE_LMO_t* canopen_get_lmo_for_tx(uint32_t can_id)
-{
-    uint32_t lmo_index = canopen_get_lmo_index_for_id(can_id);
-    canopen_dave_config_t config = canopen_get_dave_config();
-    
-    /* **✅ 確保索引有效且 LMO 存在 (基於 DAVE UI 配置)** */
-    if (lmo_index < config.lmo_count && CAN_NODE_0.lmobj_ptr[lmo_index] != NULL) {
-        return CAN_NODE_0.lmobj_ptr[lmo_index];
-    }
-    
-    /* **✅ 預設使用第一個 LMO (DAVE UI 配置)** */
-    return CAN_NODE_0.lmobj_ptr[0];
-}
-
-/**
- * @brief 獲取用於接收的 LMO 配置 (固定為 LMO_04)
- * 
- * **✅ 讀取 UI 配置：使用 DAVE UI 配置的接收 LMO**
- */
-static const CAN_NODE_LMO_t* canopen_get_lmo_for_rx(void)
-{
-    /* **✅ 動態從 DAVE UI 配置尋找接收類型的 LMO** */
-    for (uint8_t i = 0; i < CAN_NODE_0.mo_count; i++) {
-        if (CAN_NODE_0.lmobj_ptr[i] != NULL && 
-            CAN_NODE_0.lmobj_ptr[i]->mo_ptr != NULL &&
-            CAN_NODE_0.lmobj_ptr[i]->mo_ptr->can_mo_type == XMC_CAN_MO_TYPE_RECMSGOBJ) {
-            return CAN_NODE_0.lmobj_ptr[i];
-        }
-    }
-    
-    /* **✅ 後備方案：如果找不到接收類型，使用最後一個 LMO** */
-    uint8_t last_idx = CAN_NODE_0.mo_count > 0 ? CAN_NODE_0.mo_count - 1 : CANOPEN_LMO_SDO_RX;
-    return CAN_NODE_0.lmobj_ptr[last_idx];
+    return g_canopen_node_id;
 }
 
 /**
  * @brief 驗證 DAVE 配置是否有效
- * 
- * **✅ 配置驗證：確保 DAVE APP 的 UI 配置符合 CANopen 需求**
  */
 static bool canopen_is_dave_config_valid(void)
 {
-    canopen_dave_config_t config = canopen_get_dave_config();
+    uint8_t node_id = canopen_get_node_id();
     
     /* **✅ 檢查 Node ID 範圍 (CANopen 標準)** */
-    if (config.node_id < 1 || config.node_id > 127) {
-        Debug_Printf("❌ 無效的 Node ID: %d (範圍: 1-127)\r\n", config.node_id);
+    if (node_id < 1 || node_id > 127) {
+        Debug_Printf("❌ 無效的 Node ID: %d (範圍: 1-127)\r\n", node_id);
         return false;
     }
     
     /* **✅ 檢查 DAVE UI 配置的 LMO 數量** */
-    if (config.lmo_count < 4) {
-        Debug_Printf("❌ DAVE UI LMO 數量不足: %d (需要至少 4 個)\r\n", config.lmo_count);
+    if (CAN_NODE_0.mo_count < 12) {
+        Debug_Printf("❌ DAVE UI LMO 數量不足: %d (需要 12 個)\r\n", CAN_NODE_0.mo_count);
         return false;
     }
     
     /* **✅ 檢查必要的 LMO 是否在 DAVE UI 中配置** */
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 12; i++) {
         if (CAN_NODE_0.lmobj_ptr[i] == NULL) {
             Debug_Printf("❌ LMO_%02d 在 DAVE UI 中未配置\r\n", i + 1);
             return false;
         }
     }
     
-    /* **✅ 檢查 DAVE UI Service Request 0 配置** */
-    if (!config.service_request_0) {
-        Debug_Printf("⚠️ DAVE UI 未使用 Service Request 0，中斷可能無法正常工作\r\n");
-    }
-    
     /* **✅ 檢查 DAVE UI 波特率配置** */
-    if (config.baudrate != 500000) {
-        Debug_Printf("⚠️ DAVE UI 波特率 %lu bps 與預期 500kbps 不同\r\n", config.baudrate);
-    } else {
-        Debug_Printf("✅ 波特率配置正確: %lu bps (500 kbps)\r\n", config.baudrate);
+    if (CAN_NODE_0.baudrate_config != NULL) {
+        uint32_t baudrate = CAN_NODE_0.baudrate_config->baudrate;
+        if (baudrate != 500000) {
+            Debug_Printf("⚠️ DAVE UI 波特率 %lu bps 與預期 500kbps 不同\r\n", baudrate);
+        } else {
+            Debug_Printf("✅ 波特率配置正確: %lu bps (500 kbps)\r\n", baudrate);
+        }
     }
     
-    Debug_Printf("✅ DAVE UI 配置驗證通過\r\n");
+    Debug_Printf("✅ DAVE UI 配置驗證通過 (Node ID=%d)\r\n", node_id);
     return true;
 }

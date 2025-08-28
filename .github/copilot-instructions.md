@@ -8,7 +8,7 @@
 - **開發環境**: DAVE IDE 4.5.0
 - **編譯器**: ARM-GCC-49
 - **協議棧**: CANopenNode v2.0
-- **CAN 速率**: 250 kbps
+- **CAN 波特率**: 500 kbps (由DAVE UI設定，程式碼中的數值僅供CANopenNode參考)
 - **除錯介面**: UART_0 (115200 baud)
 
 ## 關鍵檔案說明
@@ -18,6 +18,16 @@
 - `Dave/Generated/`: DAVE APP 自動產生的硬體配置檔案
 
 ## 重要編程約定
+
+### DAVE API 使用原則
+- **所有硬體參數由DAVE UI控制**: 波特率、GPIO配置、中斷設定、時鐘頻率等都在DAVE UI中設定
+- **程式碼遵循DAVE配置**: 程式碼中的數值僅供CANopenNode等軟體層參考，不影響實際硬體
+- **使用DAVE API而非直接暫存器**: 所有硬體操作都透過DAVE提供的API進行
+
+### DAVE API 使用原則
+- **所有硬體參數由DAVE UI控制**: 波特率、GPIO配置、中斷設定、時鐘頻率等都在DAVE UI中設定
+- **程式碼遵循DAVE配置**: 程式碼中的數值僅供CANopenNode等軟體層參考，不影響實際硬體
+- **使用DAVE API而非直接暫存器**: 所有硬體操作都透過DAVE提供的API進行
 
 ### DAVE API 使用注意事項
 ```c
@@ -123,6 +133,7 @@ cd "C:\prj\AI\CANOpen\Dave\XMC4800_CANopen\Debug" && & "C:\Infineon\Tools\DAVE I
 - **不要亂加 .c 檔**: 只修改現有檔案，不新增源檔案
 - **不要亂加 batch 檔**: 使用上述標準 PowerShell 命令
 - **不要亂建 J-Link 命令檔案**: 使用既有的 `flash_canopen.jlink`
+- **不要擅自修改 DAVE UI 參數**: 所有硬體設定(波特率、GPIO、中斷等)都由DAVE UI控制，程式碼必須遵循DAVE配置
 
 ### 專業工程師標準
 - **認真研讀程式碼**: 程式碼總量不到 1000 行，必須完全理解

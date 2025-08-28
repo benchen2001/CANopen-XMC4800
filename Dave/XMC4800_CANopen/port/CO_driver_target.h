@@ -169,6 +169,32 @@ typedef enum {
     CO_CAN_BITRATE_10    = 10       /* 10 kbps */
 } CO_CANbitRate_t;
 
+/* **🚀 動態 Node ID 管理 API** */
+/**
+ * @brief 設定 CANopen Node ID 並重新配置所有 LMO
+ * @param new_node_id 新的 Node ID (1-127)
+ * @return true: 設定成功, false: 參數無效
+ */
+bool canopen_set_node_id(uint8_t new_node_id);
+
+/**
+ * @brief 取得當前 CANopen Node ID
+ * @return 當前的 Node ID
+ */
+uint8_t canopen_get_current_node_id(void);
+
+/* **🎯 DAVE UI 中斷處理函數聲明** */
+/**
+ * @brief CANopen Timer 處理函數 - 1ms 定時處理
+ * @param CO_ptr CANopen 主物件指標 (在 CANopen.h 中定義)
+ */
+void canopen_timer_process(void *CO_ptr);
+
+/**
+ * @brief CANopen CAN 中斷處理函數 - CAN 訊息處理
+ */
+void canopen_can_interrupt_process(void);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
